@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iterator>
 
-const char *const TEKMATO_VERSION = "0.2.1";
+const char *const TEKMATO_VERSION = "0.2.2";
 const char *const TEKMATO_VERSION_DATE = "2026-11-11";
 
 int command::status = 0;

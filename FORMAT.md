@@ -48,7 +48,7 @@ Evidence:
 | Offset | Size | Contents |
 |---|---|---|
 | 00 | 16 | `TEKTRONIX DOS/50` |
-| 14 | 8 | volume name, zero-padded (`SYSTEM`, `EMU.8085`, `PP`, `8550DIAG`) |
+| 14 | 15 | volume name: up to 14 characters, NUL-terminated (`SYSTEM`, `EMU.8085`, `PP`, `8550DIAG3.0`). Bytes after the NUL are leftover buffer contents |
 | 24 | 2 | 0x0101 |
 | 26 | 4 | time of FORMAT (DOS/50 time, see below) |
 | 2A | 2 | block bitmap block |
@@ -58,7 +58,15 @@ Evidence:
 | 32 | 2 | **last** block number = records/2 − 1 (DSDD 0x7CA = 1994). FORMAT marks it free, and LDIR counts it |
 | 34 | 2 | *maxfiles* − 1 |
 
-The rest of the block, from 0x36 up, holds leftover buffer contents: it differs from disc to disc with no pattern. The 8501's volume names appear as `/VOL/<name>`.
+The rest of the block, from 0x36 up, holds leftover buffer contents: it differs from disc to disc with no pattern. So do 10–13, 23 and whatever follows the name's NUL. The 8501's volume names appear as `/VOL/<name>`.
+
+**Volume name length** (settled 2026-11-11; this table used to say 8 bytes, leaving byte 1C "unknown"):
+- **FORMAT:** `FORMAT:Z:N /DEV/FLX1 100 ABCDEFGHIJK`, run in the emulator on an image filled with AA, writes `ABCDEFGHIJK` at 14–1E and 00 at 1F. Bytes 10–13, 20–23 and 36 up hold buffer leftovers, not AA. A 20-character name is cut to 14 (`ABCDEFGHIJKLMN`, 00 at 22).
+- **Lookup:** DOS/50 then lists `/VOL/ABCDEFGHIJK`, but `/VOL/ABCDEFGH` gives "Error 1D File not found". The whole name counts.
+- **The diagnostic discs:** their names are `8550DIAG3.0` and `8550DIAG2.4`. 3.0's own resident opens `/VOL/8550DIAG3.0/8085.TST`, so byte 1C (`3`, `2`) is the name's ninth character.
+- **SYSTEM:** its byte 1C (`C`), after `SYSTEM` and its NUL, is a leftover. So is the `5` at 20 on `EMU.8085` and `EMU.8086`, whose names fill 14–1B and end with the NUL at 1C.
+- **The PROM programmer disc** reads `..85PP.SAV` from 10. Its name is `PP` (14–15, NUL at 16); the `85` at 12–13 and the `SAV` after the NUL are leftovers.
+- **tekmato** reads and writes the whole name since 0.2.2 (before, 8 bytes: it showed the diagnostic discs as `8550DIAG`).
 
 ## File descriptor (512 bytes)
 

@@ -205,15 +205,15 @@ std::string volume::volume_name() const
 {
 	const u8 *l = blk(LABEL_BLOCK) + 0x14;
 	std::string s;
-	for (int i = 0; i < 8 && l[i]; i++) s += char(l[i]);
+	for (int i = 0; i < 14 && l[i]; i++) s += char(l[i]);   // up to 14 characters, NUL-terminated (FORMAT.md)
 	return s;
 }
 
 void volume::set_volume_name(const std::string &n)
 {
 	u8 *l = blk(LABEL_BLOCK) + 0x14;
-	memset(l, 0, 8);
-	memcpy(l, n.data(), std::min<size_t>(n.size(), 8));
+	memset(l, 0, 15);
+	memcpy(l, n.data(), std::min<size_t>(n.size(), 14));
 }
 
 u32 volume::label_time() const { const u8 *l = blk(LABEL_BLOCK); return (u32(rw16(l + 0x26)) << 16) | rw16(l + 0x28); }

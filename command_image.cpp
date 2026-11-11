@@ -43,7 +43,7 @@ void command_new::process(list<string> &pars)
 		else if (!have_name) { name = p; have_name = true; }
 		else { error("usage: -new [<maxfiles>] [<volume>] [sssd|ssdd|dssd|dsdd]"); return; }
 	}
-	if (name.size() > 8) { error("volume names have at most 8 characters"); return; }
+	if (name.size() > 14) { error("volume names have at most 14 characters"); return; }
 	string err;
 	if (!vol.create(maxfiles, name, owner, g, err)) { error(err); return; }
 	dirty = true;
@@ -110,13 +110,13 @@ void command_info::process(list<string> &)
 
 void command_rename::help()
 {
-	cout << " -rename <volume>" << endl << "\tChange the volume name (8 characters max)." << endl;
+	cout << " -rename <volume>" << endl << "\tChange the volume name (14 characters max)." << endl;
 }
 
 void command_rename::process(list<string> &pars)
 {
 	if (!need_volume()) return;
-	if (pars.size() != 1 || pars.front().size() > 8 || pars.front().empty()) { error("usage: -rename <volume> (1-8 characters)"); return; }
+	if (pars.size() != 1 || pars.front().size() > 14 || pars.front().empty()) { error("usage: -rename <volume> (1-14 characters)"); return; }
 	vol.set_volume_name(pars.front());
 	dirty = true;
 }

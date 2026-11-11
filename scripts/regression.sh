@@ -29,6 +29,8 @@ expect "8085 disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-46
 expect "PROM disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-6036-01_8550F30_prom_programmer_2.1_1982.imd" -check
 expect "8086 disc clean"     "volume is consistent"    "$T" -open "$DISKS/8550_8086.IMD" -check
 expect "DIAG 2.4 clean"      "volume is consistent"    "$T" -open "$DISKS/062-5412-08_8501_1err_DOS50.imd" -check
+expect "DIAG 3.0 name"       "Volume         8550DIAG3.0" "$T" -open "$DISKS/8550_DIAG.IMD" -info
+expect "14-char volume name" "Volume         ABCDEFGHIJKLMN" "$T" -new 64 ABCDEFGHIJKLMN -info
 expect "DIAG lost blocks"    "24 blocks marked in use" "$T" -open "$DISKS/8550_DIAG.IMD" -check
 expect "DOS/50 calendar"     "CREATION=02-OCT-80/08:52:43" "$T" -open "$DISKS/System.imd" -attrib 8501.SAV
 expect "abbreviated name"    "ATT[RIBUTE]"             "$T" -open "$DISKS/System.imd" -list 8301/COMMANDS flat
