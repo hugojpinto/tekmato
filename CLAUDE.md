@@ -16,7 +16,7 @@ tekmato is a command-line tool for DOS/50 disc images, the file system of the Te
 | `command_tree.cpp` | `-delete -mkdir -link -move -attrib -check` |
 | `tekmato.cpp` | `cmd_map` dispatcher, help (as tomato: `-cmd args… -cmd args…`, prints `C : name`, errors `E :`, info `I :`) |
 | `FORMAT.md` | **the on-disk format and the evidence for each fact.** Update it whenever a field is newly understood |
-| `scripts/regression.sh` | 40 checks. Run it after any change (`make test`) |
+| `scripts/regression.sh` | 45 checks. Run it after any change (`make test`) |
 
 Adding a command means:
 1. adding `DECLARE_COMMAND(x)` in `command.hpp`;
@@ -34,4 +34,4 @@ Adding a command means:
 - What ALLOCATION=SCAT/CONT is stored as (`ATT … ALLOC=CONT` changed nothing on a 1-block file).
 - What the label's byte 0x1C means (`C`, `2`, `3` or 0 on different discs).
 - The bad-block map is assumed to be bit-per-block like the block bitmap, but no disc seen has a bad block.
-- `FORMAT` hangs in the emulator after reading the blank disc's label, so `-new` is modelled on the distribution discs and verified by DOS/50 reading and writing the result.
+- (Resolved) FORMAT works in the emulator since the controller fails a format of track ≥154. `-new` matches its output; the regression compares them.

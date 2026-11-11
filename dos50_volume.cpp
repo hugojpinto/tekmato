@@ -161,7 +161,7 @@ bool volume::parse_label(std::string &err)
 	const u8 *l = blk(LABEL_BLOCK);
 	if (memcmp(l, "TEKTRONIX DOS/50", 16) != 0) { err = "not a DOS/50 volume (no label in record 10)"; return false; }
 	m_bmp = rw16(l + 0x2a); m_bad = rw16(l + 0x2c); m_dmap = rw16(l + 0x2e); m_root = rw16(l + 0x30);
-	m_nblocks = rw16(l + 0x32); m_maxfiles = rw16(l + 0x34) + 1;
+	m_nblocks = rw16(l + 0x32) + 1; m_maxfiles = rw16(l + 0x34) + 1;   // 0x32 = last block number (FORMAT frees block 0x7CA too)
 	int total = DSDD_RECORDS * RECORD / BLOCK;
 	if (m_nblocks <= 0 || m_nblocks > total || m_maxfiles <= 0 || FIRST_DESC_BLOCK + m_maxfiles > m_bmp ||
 	    m_bmp >= m_nblocks || m_bad >= m_nblocks || m_dmap >= m_nblocks || m_root >= m_nblocks) {
@@ -580,7 +580,7 @@ bool volume::create(int maxfiles, const std::string &volname, const std::string 
 	ww16(l + 0x26, u16(now >> 16)); ww16(l + 0x28, u16(now));
 	int bmp = FIRST_DESC_BLOCK + maxfiles;
 	ww16(l + 0x2a, u16(bmp)); ww16(l + 0x2c, u16(bmp + 1)); ww16(l + 0x2e, u16(bmp + 2)); ww16(l + 0x30, u16(bmp + 3));
-	ww16(l + 0x32, 0x7ca);                           // as on every DSDD volume seen
+	ww16(l + 0x32, 0x7ca);                           // last block, as FORMAT writes for DSDD
 	ww16(l + 0x34, u16(maxfiles - 1));
 	if (!parse_label(err)) return false;
 	set_volume_name(volname);

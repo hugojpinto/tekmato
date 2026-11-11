@@ -26,7 +26,7 @@ Images can be raw (`.img`, 3991 × 256-byte records, as the MDL emulator uses) o
 | Command | What it does | DOS/50 equivalent |
 |---|---|---|
 | `-open FILE` | open a raw or IMD image | — |
-| `-new [maxfiles] [volume]` | empty data volume, as FORMAT lays it out | `FORMAT` |
+| `-new [maxfiles] [volume]` | empty data volume, laid out exactly as DOS/50's FORMAT does (verified) | `FORMAT` |
 | `-save`, `-saveas FILE` | write the image | — |
 | `-info` | label, layout, free space | `LDIR` totals |
 | `-list [dir] [flat] [ids]` | tree with size, blocks, links, capabilities, owner, date | `LDIR` |

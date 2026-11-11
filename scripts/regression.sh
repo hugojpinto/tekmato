@@ -89,6 +89,18 @@ if [ -x "$EMU" ]; then
 	grep -q "Error" "$W/emu.log" && bad "DOS/50 reported an error: $(grep Error "$W/emu.log" | head -1)" || ok
 	"$T" -open "$W/d1.img" -check -list > "$W/after.log" 2>&1
 	grep -q "volume is consistent" "$W/after.log" && grep -q " K " "$W/after.log" && grep -q "NEW/" "$W/after.log" && ok || { bad "DOS/50's writes read back"; cat "$W/after.log" | tail -8; }
+	# DOS/50's own FORMAT on a blank disc: tekmato must read it, and -new must lay out
+	# the same label fields and bitmaps
+	head -c $((3991*256)) /dev/zero > "$W/blank.img"
+	cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
+	(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/blank.img" -cycles $((100*2000000)) \
+		-type 32 'FORMAT:N /DEV/FLX1 200 FMT\r' -type 90 'LDIR /VOL/FMT\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/fmt.log"
+	grep -q "Free blocks     1785" "$W/fmt.log" && ok || bad "DOS/50 FORMAT (LDIR after it)"
+	expect "FORMAT volume clean" "volume is consistent" "$T" -open "$W/blank.img" -check
+	expect "FORMAT free blocks"  "Free blocks    1785" "$T" -open "$W/blank.img" -info
+	"$T" -new 200 FMT -saveas "$W/tnew.img" >/dev/null 2>&1
+	cmp -s <(dd if="$W/blank.img" bs=512 skip=206 count=3 2>/dev/null) <(dd if="$W/tnew.img" bs=512 skip=206 count=3 2>/dev/null) && ok || bad "-new bitmaps differ from FORMAT's"
+	cmp -s <(dd if="$W/blank.img" bs=1 skip=$((5*512+0x2a)) count=12 2>/dev/null) <(dd if="$W/tnew.img" bs=1 skip=$((5*512+0x2a)) count=12 2>/dev/null) && ok || bad "-new label layout differs from FORMAT's"
 else
 	echo "(skipping DOS/50 cross-check: $EMU not built)"
 fi

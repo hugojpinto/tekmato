@@ -13,7 +13,7 @@ The controller addresses 3991 records of 256 bytes, numbered in physical order:
 
 A raw image (`.img`) is those records back to back. An ImageDisk (`.imd`) image decodes to the same bytes.
 
-The file system works in **blocks of 512 bytes, which are 2 records**: block *n* is records 2*n* and 2*n*+1. Every DSDD volume seen has 1994 (0x7CA) blocks.
+The file system works in **blocks of 512 bytes, which are 2 records**: block *n* is records 2*n* and 2*n*+1. A DSDD volume has blocks 0–1994 (the label stores the last block number, 0x7CA). Record 3990 is unused.
 
 ## Layout
 
@@ -46,7 +46,7 @@ Evidence:
 | 2C | 2 | bad-block map block |
 | 2E | 2 | descriptor bitmap block |
 | 30 | 2 | root directory block |
-| 32 | 2 | number of blocks (0x7CA) |
+| 32 | 2 | **last** block number (0x7CA = 1994). FORMAT marks block 1994 free, and LDIR counts it |
 | 34 | 2 | *maxfiles* − 1 |
 
 The rest of the block, from 0x36 up, holds leftover buffer contents: it differs from disc to disc with no pattern. The 8501's volume names appear as `/VOL/<name>`.
@@ -74,7 +74,7 @@ How each field was identified:
 - **Link count:** `FLINK` raised 1F8 from 1 to 2.
 - **Unused bytes:** bytes outside these fields are stale buffer contents.
 
-Root (id 0) and `8501_BOOTSTRAP` (id 1) are created by FORMAT:
+Root (id 0) and `8501_BOOTSTRAP` (id 1) are created by FORMAT, both owned by the user who runs it:
 - the root has one block;
 - `8501_BOOTSTRAP` has extent (0, 5), size 0 on a data disc and 2048 on a system disc.
 
@@ -109,3 +109,11 @@ DOS/50 enforces the capabilities. A user who doesn't own a directory needs PW to
 
 - **Orphans.** SYSTEM has 88 descriptors marked in use that no directory names. Their link count is 0, their extent lists are stale, and they hold 95 blocks. DOS/50 counts them in "Files used". They are probably files deleted while still open. `tekmato -check fix` frees them, and only the blocks no live file uses.
 - **Leaked blocks.** 8550_DIAG.IMD (diagnostics 1984) has 24 blocks marked in use that no file owns.
+
+## FORMAT
+Watched in the emulator on an all-zero drive-1 image (`FORMAT:N /DEV/FLX1 200 FMT`):
+1. FORMAT reads the old label (record 10) several times.
+2. It issues format-DD (047) for track 0, 1, 2… with **FDDAR = track number and no upper limit**. It stops when the controller fails track 154, the first one past 77 cylinders × 2 sides.
+3. It writes the label, all *maxfiles* descriptor blocks (unused ones carry stale buffer contents), the three maps and the root.
+
+The result agrees with tekmato `-new` in every field above, and the bitmaps are byte-identical. `scripts/regression.sh` checks both.
