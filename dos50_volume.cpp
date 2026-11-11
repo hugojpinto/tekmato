@@ -46,6 +46,30 @@ void descriptor::set_owner(const std::string &o)
 	memcpy(m_p + 0x1c8, o.data(), std::min<size_t>(o.size(), 14));
 }
 
+static u16 rw16(const u8 *p) { return u16(p[0] | (p[1] << 8)); }
+static void ww16(u8 *p, u16 v) { p[0] = u8(v); p[1] = u8(v >> 8); }
+
+// ---------------------------------------------------------------- geometry
+
+bool geometry::from_records(size_t n, geometry &g)
+{
+	for (int k = 0; k < 4; k++) {
+		geometry c; c.ds = k & 2; c.dd = k & 1;
+		if (size_t(c.records()) == n) { g = c; return true; }
+	}
+	return false;
+}
+
+bool geometry::from_name(const std::string &n, geometry &g)
+{
+	// lower case only, so upper-case volume names like "SSDD" stay names
+	std::string u;
+	for (char c : n) { if (isupper(static_cast<unsigned char>(c))) return false; u += char(toupper(static_cast<unsigned char>(c))); }
+	if (u.size() != 4 || (u[0] != 'S' && u[0] != 'D') || u[1] != 'S' || (u[2] != 'S' && u[2] != 'D') || u[3] != 'D') return false;
+	g.ds = u[0] == 'D'; g.dd = u[2] == 'D';
+	return true;
+}
+
 // ---------------------------------------------------------------- image I/O
 
 static bool decode_imd(const std::vector<u8> &d, std::vector<u8> &out, std::string &comment, std::string &err)
@@ -83,8 +107,8 @@ static bool decode_imd(const std::vector<u8> &d, std::vector<u8> &out, std::stri
 	return true;
 }
 
-// 8501 physical format: 77 cyl x 2 heads x 26 sectors; cyl 0 head 0 is 128-byte FM, the rest 256-byte MFM.
-static bool encode_imd(const std::vector<u8> &lin, const std::string &comment, std::vector<u8> &out)
+// 8501 physical format for the geometry: 26 sectors per track, FM 128 or MFM 256 bytes.
+static bool encode_imd(const std::vector<u8> &lin, const geometry &g, const std::string &comment, std::vector<u8> &out)
 {
 	char hdr[64];
 	time_t now = time(nullptr); struct tm *t = localtime(&now);
@@ -92,20 +116,17 @@ static bool encode_imd(const std::vector<u8> &lin, const std::string &comment, s
 	out.assign(hdr, hdr + strlen(hdr));
 	out.insert(out.end(), comment.begin(), comment.end());
 	out.push_back(0x1a);
-	size_t off = 0;
-	for (int cyl = 0; cyl < 77; cyl++)
-		for (int head = 0; head < 2; head++) {
-			bool fm = cyl == 0 && head == 0;
-			size_t bs = fm ? 128 : 256;
-			out.insert(out.end(), { u8(fm ? 0 : 3), u8(cyl), u8(head), 26, u8(fm ? 0 : 1) });
-			for (int s = 1; s <= 26; s++) out.push_back(u8(s));
-			for (int s = 0; s < 26; s++) {
-				const u8 *p = off + bs <= lin.size() ? &lin[off] : nullptr;
-				if (p && std::all_of(p, p + bs, [&](u8 b) { return b == p[0]; })) { out.push_back(2); out.push_back(p[0]); }
-				else { out.push_back(1); for (size_t k = 0; k < bs; k++) out.push_back(p ? p[k] : 0xe5); }
-				off += bs;
-			}
+	for (int trk = 0; trk < g.tracks(); trk++) {
+		bool fm = g.fm(trk);
+		size_t bs = fm ? 128 : 256, off = size_t(g.track_first(trk)) * RECORD;
+		out.insert(out.end(), { u8(fm ? 0 : 3), u8(g.cylinder(trk)), u8(g.side(trk)), 26, u8(fm ? 0 : 1) });
+		for (int s = 1; s <= 26; s++) out.push_back(u8(s));
+		for (int s = 0; s < 26; s++, off += bs) {
+			const u8 *p = off + bs <= lin.size() ? &lin[off] : nullptr;
+			if (p && std::all_of(p, p + bs, [&](u8 b) { return b == p[0]; })) { out.push_back(2); out.push_back(p[0]); }
+			else { out.push_back(1); for (size_t k = 0; k < bs; k++) out.push_back(p ? p[k] : 0xe5); }
 		}
+	}
 	return true;
 }
 
@@ -125,9 +146,19 @@ bool volume::load(const std::string &path, std::string &err)
 	m_is_imd = d.size() >= 4 && d[0] == 'I' && d[1] == 'M' && d[2] == 'D';
 	if (m_is_imd) { if (!decode_imd(d, lin, m_imd_comment, err)) return false; }
 	else lin = d;
-	if (lin.size() < size_t(DSDD_RECORDS) * RECORD) {
+	// geometry from the record count; failing that (a truncated raw dump), from the
+	// label's last block number, padding the image to the full size
+	if (lin.size() % RECORD || !geometry::from_records(lin.size() / RECORD, m_geom)) {
 		if (lin.size() < size_t(LABEL_BLOCK + 1) * BLOCK) { err = "image too small for a DOS/50 volume"; return false; }
-		lin.resize(size_t(DSDD_RECORDS) * RECORD, 0);
+		const u8 *l = &lin[size_t(LABEL_BLOCK) * BLOCK];
+		int blocks = rw16(l + 0x32) + 1;
+		bool found = false;
+		for (int k = 3; k >= 0 && !found; k--) {
+			geometry c; c.ds = k & 2; c.dd = k & 1;
+			if (c.blocks() == blocks && lin.size() <= size_t(c.records()) * RECORD) { m_geom = c; found = true; }
+		}
+		if (!found) { err = "image size " + std::to_string(lin.size()) + " matches no 8501 disc geometry"; return false; }
+		lin.resize(size_t(m_geom.records()) * RECORD, 0);
 	}
 	m_img = lin;
 	m_path = path;
@@ -138,8 +169,8 @@ bool volume::load(const std::string &path, std::string &err)
 bool volume::save(const std::string &path, std::string &err) const
 {
 	std::vector<u8> out;
-	if (ends_with_ci(path, ".imd")) encode_imd(m_img, m_imd_comment.empty() ? std::string("tekmato\r\n") : m_imd_comment, out);
-	else out.assign(m_img.begin(), m_img.begin() + size_t(DSDD_RECORDS) * RECORD);
+	if (ends_with_ci(path, ".imd")) encode_imd(m_img, m_geom, m_imd_comment.empty() ? std::string("tekmato\r\n") : m_imd_comment, out);
+	else out.assign(m_img.begin(), m_img.begin() + size_t(m_geom.records()) * RECORD);
 	std::string tmp = path + ".tmp";
 	{
 		std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
@@ -153,8 +184,6 @@ bool volume::save(const std::string &path, std::string &err) const
 
 // ---------------------------------------------------------------- label
 
-static u16 rw16(const u8 *p) { return u16(p[0] | (p[1] << 8)); }
-static void ww16(u8 *p, u16 v) { p[0] = u8(v); p[1] = u8(v >> 8); }
 
 bool volume::parse_label(std::string &err)
 {
@@ -162,7 +191,7 @@ bool volume::parse_label(std::string &err)
 	if (memcmp(l, "TEKTRONIX DOS/50", 16) != 0) { err = "not a DOS/50 volume (no label in record 10)"; return false; }
 	m_bmp = rw16(l + 0x2a); m_bad = rw16(l + 0x2c); m_dmap = rw16(l + 0x2e); m_root = rw16(l + 0x30);
 	m_nblocks = rw16(l + 0x32) + 1; m_maxfiles = rw16(l + 0x34) + 1;   // 0x32 = last block number (FORMAT frees block 0x7CA too)
-	int total = DSDD_RECORDS * RECORD / BLOCK;
+	int total = m_geom.blocks();
 	if (m_nblocks <= 0 || m_nblocks > total || m_maxfiles <= 0 || FIRST_DESC_BLOCK + m_maxfiles > m_bmp ||
 	    m_bmp >= m_nblocks || m_bad >= m_nblocks || m_dmap >= m_nblocks || m_root >= m_nblocks) {
 		err = "inconsistent DOS/50 label"; return false;
@@ -567,11 +596,12 @@ int volume::free_orphans(const check_report &r)
 
 // ---------------------------------------------------------------- new volume
 
-bool volume::create(int maxfiles, const std::string &volname, const std::string &owner, std::string &err)
+bool volume::create(int maxfiles, const std::string &volname, const std::string &owner, const geometry &g, std::string &err)
 {
-	int total = DSDD_RECORDS * RECORD / BLOCK;        // 1995 whole blocks
-	if (maxfiles < 16 || FIRST_DESC_BLOCK + maxfiles + 4 >= total) { err = "maxfiles out of range"; return false; }
-	m_img.assign(size_t(DSDD_RECORDS) * RECORD, 0);
+	int total = g.blocks();
+	if (maxfiles < 16 || FIRST_DESC_BLOCK + maxfiles + 4 >= total) { err = "maxfiles out of range for " + g.name(); return false; }
+	m_geom = g;
+	m_img.assign(size_t(g.records()) * RECORD, 0);
 	m_is_imd = false; m_imd_comment.clear(); m_path.clear();
 	u8 *l = blk(LABEL_BLOCK);
 	memcpy(l, "TEKTRONIX DOS/50", 16);
@@ -580,7 +610,7 @@ bool volume::create(int maxfiles, const std::string &volname, const std::string 
 	ww16(l + 0x26, u16(now >> 16)); ww16(l + 0x28, u16(now));
 	int bmp = FIRST_DESC_BLOCK + maxfiles;
 	ww16(l + 0x2a, u16(bmp)); ww16(l + 0x2c, u16(bmp + 1)); ww16(l + 0x2e, u16(bmp + 2)); ww16(l + 0x30, u16(bmp + 3));
-	ww16(l + 0x32, 0x7ca);                           // last block, as FORMAT writes for DSDD
+	ww16(l + 0x32, u16(g.blocks() - 1));             // last block, as FORMAT writes (records/2 - 1)
 	ww16(l + 0x34, u16(maxfiles - 1));
 	if (!parse_label(err)) return false;
 	set_volume_name(volname);

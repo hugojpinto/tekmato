@@ -4,16 +4,25 @@ This is the file system of the Tektronix 8550 MDL: DOS/50 V1.0 and later, on the
 
 All multi-byte values are little-endian PDP-11 words. 32-bit values store the **high word first** (PDP-11 order).
 
-## Records and blocks
+## Records, geometry and blocks
 
-The controller addresses 3991 records of 256 bytes, numbered in physical order:
+The controller addresses 256-byte records in physical order (cylinder, then side). The 8501 takes all four IBM-compatible 8" formats (service manual 061-2355-00, controller chapter). Each has 77 cylinders and 26 sectors per track:
 
-- cylinder 0 side 0 holds 26 sectors of 128 bytes (FM), which make 13 records;
-- the other 153 tracks each hold 26 sectors of 256 bytes (MFM).
+- **single density (FM):** 128-byte sectors, so 13 records per track;
+- **double density (MFM):** 256-byte sectors, so 26 records per track, except track 0 (cylinder 0 side 0), which is always FM.
 
-A raw image (`.img`) is those records back to back. An ImageDisk (`.imd`) image decodes to the same bytes.
+| Geometry | Records | Last block | Image size |
+|---|---|---|---|
+| SSSD | 1001 | 499 | 256 256 |
+| SSDD | 1989 | 993 | 509 184 |
+| DSSD | 2002 | 1000 | 512 512 |
+| DSDD (the 8501's standard disc) | 3991 | 1994 | 1 021 696 |
 
-The file system works in **blocks of 512 bytes, which are 2 records**: block *n* is records 2*n* and 2*n*+1. A DSDD volume has blocks 0–1994 (the label stores the last block number, 0x7CA). Record 3990 is unused.
+A raw image (`.img`) is the records back to back, so its size identifies the geometry. An ImageDisk (`.imd`) image decodes to the same bytes.
+
+The file system works in **blocks of 512 bytes, which are 2 records**: block *n* is records 2*n* and 2*n*+1. The label stores the **last** block number, which is records/2 − 1. On DSDD that is 0x7CA = 1994, leaving record 3990 unused.
+
+Every disc in the collection is DSDD. The other three geometries were established by running DOS/50's FORMAT (DD) and `FORMAT:S` (single density) on one- and two-sided blank images in the emulator.
 
 ## Layout
 
@@ -46,7 +55,7 @@ Evidence:
 | 2C | 2 | bad-block map block |
 | 2E | 2 | descriptor bitmap block |
 | 30 | 2 | root directory block |
-| 32 | 2 | **last** block number (0x7CA = 1994). FORMAT marks block 1994 free, and LDIR counts it |
+| 32 | 2 | **last** block number = records/2 − 1 (DSDD 0x7CA = 1994). FORMAT marks it free, and LDIR counts it |
 | 34 | 2 | *maxfiles* − 1 |
 
 The rest of the block, from 0x36 up, holds leftover buffer contents: it differs from disc to disc with no pattern. The 8501's volume names appear as `/VOL/<name>`.
@@ -111,9 +120,12 @@ DOS/50 enforces the capabilities. A user who doesn't own a directory needs PW to
 - **Leaked blocks.** 8550_DIAG.IMD (diagnostics 1984) has 24 blocks marked in use that no file owns.
 
 ## FORMAT
-Watched in the emulator on an all-zero drive-1 image (`FORMAT:N /DEV/FLX1 200 FMT`):
+Watched in the emulator on blank one- and two-sided images (`FORMAT[:S]:N /DEV/FLX1 n NAME`):
 1. FORMAT reads the old label (record 10) several times.
-2. It issues format-DD (047) for track 0, 1, 2… with **FDDAR = track number and no upper limit**. It stops when the controller fails track 154, the first one past 77 cylinders × 2 sides.
-3. It writes the label, all *maxfiles* descriptor blocks (unused ones carry stale buffer contents), the three maps and the root.
+2. It issues one format command per track: 047 for double density, 051 for `:S`. FDDAR = 0, 1, 2… with no upper limit, and it stops when the controller refuses the first track past the end (77 one-sided, 154 two-sided).
+3. It asks the status command for the capacity, and sizes the volume from it.
+4. It writes the label, all *maxfiles* descriptor blocks (unused ones carry stale buffer contents), the three maps and the root.
 
-The result agrees with tekmato `-new` in every field above, and the bitmaps are byte-identical. `scripts/regression.sh` checks both.
+`FORMAT:Z` skips step 2.
+
+For all four geometries the result agrees with tekmato `-new` in every field above, and the bitmaps are byte-identical. `scripts/regression.sh` checks this, and also has DOS/50 read and write a tekmato-made `.imd` of each geometry.

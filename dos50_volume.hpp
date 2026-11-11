@@ -13,7 +13,6 @@ using u8 = uint8_t; using u16 = uint16_t; using u32 = uint32_t;
 
 constexpr int RECORD = 256;           // controller record
 constexpr int BLOCK = 512;            // file system block = 2 records
-constexpr int DSDD_RECORDS = 3991;    // double-sided double-density disc
 constexpr int FIRST_DESC_BLOCK = 6;   // descriptor of file id N is block 6+N
 constexpr int LABEL_BLOCK = 5;        // record 10
 constexpr int ENTRY = 16;             // directory entry: id (2) + name (14)
@@ -22,6 +21,25 @@ constexpr int MAX_EXTENTS = 0x1b0 / 4;
 
 // capability bits (descriptor 0x1c6), as ATTRIBUTE shows them
 constexpr u8 CAP_OR = 0x01, CAP_OW = 0x02, CAP_PR = 0x10, CAP_PW = 0x20;
+
+// 8501 disc geometry: 77 cylinders, 1 or 2 sides, 26 sectors per track; single
+// density (FM, 128-byte sectors = 13 records per track) or double density (MFM,
+// 256-byte sectors = 26 records), with track 0 always FM. Logical track t is
+// cylinder t/2, side t%2 on two-sided discs. Capacities differ, so the record
+// count identifies the geometry: SSSD 1001, SSDD 1989, DSSD 2002, DSDD 3991.
+struct geometry {
+	bool ds = true, dd = true;
+	int  tracks() const { return ds ? 154 : 77; }
+	bool fm(int t) const { return !dd || t == 0; }
+	int  track_first(int t) const { return t == 0 ? 0 : dd ? 13 + 26 * (t - 1) : 13 * t; }
+	int  records() const { return track_first(tracks()); }
+	int  blocks() const { return records() / 2; }     // FORMAT: last block = records/2 - 1
+	int  cylinder(int t) const { return ds ? t / 2 : t; }
+	int  side(int t) const { return ds ? t % 2 : 0; }
+	std::string name() const { return std::string(ds ? "DS" : "SS") + (dd ? "DD" : "SD"); }
+	static bool from_records(size_t n, geometry &g);
+	static bool from_name(const std::string &n, geometry &g);
+};
 
 struct extent { u16 block, count; };
 
@@ -77,7 +95,8 @@ public:
 	// ---- image I/O ----
 	bool load(const std::string &path, std::string &err);
 	bool save(const std::string &path, std::string &err) const;   // .imd -> IMD, else raw
-	bool create(int maxfiles, const std::string &volname, const std::string &owner, std::string &err);
+	bool create(int maxfiles, const std::string &volname, const std::string &owner, const geometry &g, std::string &err);
+	const geometry &geom() const { return m_geom; }
 	bool loaded() const { return !m_img.empty(); }
 	const std::string &path() const { return m_path; }
 
@@ -126,6 +145,7 @@ private:
 	std::vector<u8> m_img;
 	std::string m_path, m_imd_comment;
 	bool m_is_imd = false;
+	geometry m_geom;
 	int m_nblocks = 0, m_maxfiles = 0, m_bmp = 0, m_bad = 0, m_dmap = 0, m_root = 0;
 
 	u8 *blk(int b) { return &m_img[size_t(b) * BLOCK]; }

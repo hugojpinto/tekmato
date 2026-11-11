@@ -1,5 +1,6 @@
 // Image-level commands: -open -new -save -saveas -info -rename -owner
 #include "command.hpp"
+#include <cctype>
 
 using namespace std;
 
@@ -21,25 +22,32 @@ void command_open::process(list<string> &pars)
 
 void command_new::help()
 {
-	cout << " -new [<maxfiles>] [<volume>]" << endl
-	     << "\tCreate an empty DOS/50 data volume in memory, laid out as FORMAT" << endl
-	     << "\tdoes (default 256 files, volume name TEKMATO). Not bootable." << endl
-	     << "\tThe root belongs to the -owner user (default NO.NAME, DOS/50's" << endl
-	     << "\tdefault user), who can then write to it." << endl
-	     << "\tFollow with -saveas." << endl;
+	cout << " -new [<maxfiles>] [<volume>] [sssd|ssdd|dssd|dsdd]" << endl
+	     << "\tCreate an empty DOS/50 data volume in memory, laid out exactly as" << endl
+	     << "\tDOS/50's FORMAT does (default 256 files, volume TEKMATO, dsdd =" << endl
+	     << "\tthe 8501's double-sided double-density disc). Single or double" << endl
+	     << "\tsided, single (FORMAT:S) or double density. Not bootable. The root" << endl
+	     << "\tbelongs to the -owner user (default NO.NAME, DOS/50's default" << endl
+	     << "\tuser), who can then write to it. Follow with -saveas." << endl;
 }
 
 void command_new::process(list<string> &pars)
 {
 	int maxfiles = 256;
 	string name = "TEKMATO";
-	if (!pars.empty()) { maxfiles = atoi(pars.front().c_str()); pars.pop_front(); }
-	if (!pars.empty()) { name = pars.front(); pars.pop_front(); }
+	dos50::geometry g;
+	bool have_max = false, have_name = false;
+	for (auto &p : pars) {
+		if (dos50::geometry::from_name(p, g)) continue;
+		if (!have_max && !p.empty() && isdigit(static_cast<unsigned char>(p[0]))) { maxfiles = atoi(p.c_str()); have_max = true; }
+		else if (!have_name) { name = p; have_name = true; }
+		else { error("usage: -new [<maxfiles>] [<volume>] [sssd|ssdd|dssd|dsdd]"); return; }
+	}
 	if (name.size() > 8) { error("volume names have at most 8 characters"); return; }
 	string err;
-	if (!vol.create(maxfiles, name, owner, err)) { error(err); return; }
+	if (!vol.create(maxfiles, name, owner, g, err)) { error(err); return; }
 	dirty = true;
-	info("new volume " + name + ", " + to_string(maxfiles) + " files, " + to_string(vol.free_blocks()) + " free blocks");
+	info("new " + g.name() + " volume " + name + ", " + to_string(maxfiles) + " files, " + to_string(vol.free_blocks()) + " free blocks");
 }
 
 void command_save::help()
@@ -82,7 +90,10 @@ void command_info::help()
 void command_info::process(list<string> &)
 {
 	if (!need_volume()) return;
+	const dos50::geometry &g = vol.geom();
 	cout << "  Signature      " << vol.signature() << endl
+	     << "  Disc           " << g.name() << ": " << (g.ds ? 2 : 1) << " side" << (g.ds ? "s" : "") << ", " << (g.dd ? "double" : "single")
+	     << " density, " << g.records() << " records" << endl
 	     << "  Volume         " << vol.volume_name() << endl
 	     << "  Formatted      " << dos50::volume::format_time(vol.label_time()) << endl
 	     << "  Blocks         " << vol.nblocks() << " x 512 bytes" << endl

@@ -89,18 +89,33 @@ if [ -x "$EMU" ]; then
 	grep -q "Error" "$W/emu.log" && bad "DOS/50 reported an error: $(grep Error "$W/emu.log" | head -1)" || ok
 	"$T" -open "$W/d1.img" -check -list > "$W/after.log" 2>&1
 	grep -q "volume is consistent" "$W/after.log" && grep -q " K " "$W/after.log" && grep -q "NEW/" "$W/after.log" && ok || { bad "DOS/50's writes read back"; cat "$W/after.log" | tail -8; }
-	# DOS/50's own FORMAT on a blank disc: tekmato must read it, and -new must lay out
-	# the same label fields and bitmaps
-	head -c $((3991*256)) /dev/zero > "$W/blank.img"
-	cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
-	(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/blank.img" -cycles $((100*2000000)) \
-		-type 32 'FORMAT:N /DEV/FLX1 200 FMT\r' -type 90 'LDIR /VOL/FMT\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/fmt.log"
-	grep -q "Free blocks     1785" "$W/fmt.log" && ok || bad "DOS/50 FORMAT (LDIR after it)"
-	expect "FORMAT volume clean" "volume is consistent" "$T" -open "$W/blank.img" -check
-	expect "FORMAT free blocks"  "Free blocks    1785" "$T" -open "$W/blank.img" -info
-	"$T" -new 200 FMT -saveas "$W/tnew.img" >/dev/null 2>&1
-	cmp -s <(dd if="$W/blank.img" bs=512 skip=206 count=3 2>/dev/null) <(dd if="$W/tnew.img" bs=512 skip=206 count=3 2>/dev/null) && ok || bad "-new bitmaps differ from FORMAT's"
-	cmp -s <(dd if="$W/blank.img" bs=1 skip=$((5*512+0x2a)) count=12 2>/dev/null) <(dd if="$W/tnew.img" bs=1 skip=$((5*512+0x2a)) count=12 2>/dev/null) && ok || bad "-new label layout differs from FORMAT's"
+	# every disc geometry: DOS/50's own FORMAT on a blank disc must equal tekmato -new
+	# (label layout and bitmaps), and DOS/50 must read and write a tekmato .imd volume
+	for g in sssd ssdd dssd dsdd; do
+		case $g in sssd) recs=1989; opt=":S"; want=1001;; ssdd) recs=1989; opt=""; want=1989;;
+		           dssd) recs=3991; opt=":S"; want=2002;; dsdd) recs=3991; opt=""; want=3991;; esac
+		head -c $((recs*256)) /dev/zero > "$W/f_$g.img"
+		cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
+		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/f_$g.img" -cycles $((100*2000000)) \
+			-type 32 "FORMAT${opt}:N /DEV/FLX1 100 FMT\\r" </dev/null >/dev/null 2>&1)
+		[ $(( $(wc -c < "$W/f_$g.img") / 256 )) -eq $want ] && ok || bad "$g: FORMAT left $(( $(wc -c < "$W/f_$g.img") / 256 )) records, wanted $want"
+		expect "$g FORMAT volume clean" "volume is consistent" "$T" -open "$W/f_$g.img" -check
+		"$T" -new 100 FMT $g -saveas "$W/n_$g.img" >/dev/null 2>&1
+		python3 -I - "$W/f_$g.img" "$W/n_$g.img" <<'PY' && ok || bad "$g: -new differs from FORMAT"
+import sys, struct
+a, b = (open(f, 'rb').read() for f in sys.argv[1:3])
+la, lb = a[2560:2560 + 0x36], b[2560:2560 + 0x36]
+bm = struct.unpack_from('<H', la, 0x2a)[0]
+same = len(a) == len(b) and la[:16] == lb[:16] and la[0x2a:0x36] == lb[0x2a:0x36] and a[bm * 512:(bm + 3) * 512] == b[bm * 512:(bm + 3) * 512]
+sys.exit(0 if same else 1)
+PY
+		"$T" -new 64 TK $g -write "$W/a.txt" A.TXT text -saveas "$W/tk_$g.imd" >/dev/null 2>&1
+		cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
+		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/tk_$g.imd" -cycles $((60*2000000)) \
+			-type 32 'COPY /VOL/TK/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TK/K\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/e_$g.log"
+		grep -q "LINE TWO" "$W/e_$g.log" && ! grep -q "Error" "$W/e_$g.log" && ok || bad "$g: DOS/50 on a tekmato .imd"
+		expect "$g: DOS/50's write read back" "LOG KONG.DISM" "$T" -open "$W/tk_$g.imd" -check -type K
+	done
 else
 	echo "(skipping DOS/50 cross-check: $EMU not built)"
 fi

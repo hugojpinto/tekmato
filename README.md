@@ -1,6 +1,6 @@
 # tekmato — TEKtronix MAnipulation TOol
 
-A command-line tool for reading, writing and checking **DOS/50 disc images** of the Tektronix 8550 Microcomputer Development Lab: the 8501 Data Management Unit's 8-inch double-sided, double-density floppies.
+A command-line tool for reading, writing and checking **DOS/50 disc images** of the Tektronix 8550 Microcomputer Development Lab: the 8501 Data Management Unit's 8-inch floppies. All four formats are supported: single- or double-sided, single or double density. The standard disc was double-sided, double density.
 
 It follows [tomato](../../tomato)'s design: open an image, chain commands, save. It doesn't share any of tomato's Timex/TOS code. The DOS/50 file system it implements is documented in [FORMAT.md](FORMAT.md).
 
@@ -19,16 +19,17 @@ tekmato -open System.imd -type 8301/COMMANDS/HELP
 tekmato -open System.imd -export ./system text          # whole tree, CR -> LF
 tekmato -open work.img -write hello.asm SRC/HELLO.ASM text -save
 tekmato -new 256 PROJECT -import ./src SRC text -saveas project.img
+tekmato -new 64 SMALL sssd -saveas small.imd                 # single-sided, single density
 tekmato -open System.imd -check
 ```
-Images can be raw (`.img`, 3991 × 256-byte records, as the MDL emulator uses) or ImageDisk (`.imd`). `-saveas x.imd` writes the 8501's physical track format.
+Images can be raw (`.img`, as the MDL emulator uses) or ImageDisk (`.imd`). The size gives the geometry: SSSD 1001, SSDD 1989, DSSD 2002 or DSDD 3991 records of 256 bytes. `-saveas x.imd` writes the 8501's physical track format for the geometry.
 
 | Command | What it does | DOS/50 equivalent |
 |---|---|---|
 | `-open FILE` | open a raw or IMD image | — |
-| `-new [maxfiles] [volume]` | empty data volume, laid out exactly as DOS/50's FORMAT does (verified) | `FORMAT` |
+| `-new [maxfiles] [volume] [sssd\|ssdd\|dssd\|dsdd]` | empty data volume, laid out exactly as DOS/50's FORMAT does (verified for all four; default dsdd) | `FORMAT`, `FORMAT:S` |
 | `-save`, `-saveas FILE` | write the image | — |
-| `-info` | label, layout, free space | `LDIR` totals |
+| `-info` | geometry, label, layout, free space | `LDIR` totals |
 | `-list [dir] [flat] [ids]` | tree with size, blocks, links, capabilities, owner, date | `LDIR` |
 | `-type PATH` | print a text file | `COPY f CONO` |
 | `-read PATH [FILE] [text]` | copy a file out | — |
