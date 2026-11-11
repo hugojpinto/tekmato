@@ -20,8 +20,9 @@ static void print_banner() { cerr << endl << "TEKtronix MAnipulation TOol v" << 
 static void command_help()
 {
 	cout << "Usage: tekmato -open <image> [COMMANDS...]" << endl << endl
-	     << "Reads and writes DOS/50 disc images of the Tektronix 8550 Microcomputer" << endl
-	     << "Development Lab (8501 Data Management Unit, double-sided double-density)." << endl
+	     << "Reads, writes and checks DOS/50 disc images of the Tektronix 8550" << endl
+	     << "Microcomputer Development Lab: 8501 Data Management Unit floppies in" << endl
+	     << "all four formats (SSSD, SSDD, DSSD, DSDD), as raw .img or ImageDisk .imd." << endl
 	     << "Paths are '/'-separated from the volume root; changes stay in memory" << endl
 	     << "until -save or -saveas." << endl << endl
 	     << "Commands:" << endl;
