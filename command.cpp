@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iterator>
 
-const char *const TEKMATO_VERSION = "0.2.0";
+const char *const TEKMATO_VERSION = "0.2.1";
 const char *const TEKMATO_VERSION_DATE = "2026-11-11";
 
 int command::status = 0;
@@ -59,11 +59,11 @@ void command::to_text_dos50(std::vector<dos50::u8> &d)
 	d.swap(o);
 }
 
+// host file names keep DOS/50's abbreviation brackets (legal on every host file system), so
+// an export imports back unchanged
 std::string command::host_name(const std::string &n)
 {
-	std::string s;
-	for (char c : n) if (c != '[' && c != ']') s += c;
-	return s;
+	return n;
 }
 
 std::string command::dos50_name(const std::string &h)
@@ -71,8 +71,13 @@ std::string command::dos50_name(const std::string &h)
 	std::string base = h.substr(h.find_last_of('/') + 1), s;
 	for (unsigned char c : base) {
 		if (s.size() == size_t(dos50::NAME_LEN)) break;
-		if (c > ' ' && c < 0x7f && c != '/' && c != '[' && c != ']' && c != '*' && c != '?') s += char(c);
+		if (c > ' ' && c < 0x7f && c != '/' && c != '*' && c != '?') s += char(c);
 		else if (c == ' ') s += '_';
+	}
+	if (!dos50::volume::valid_name(s)) {        // brackets that are not one abbreviation pair: drop them
+		std::string t;
+		for (char c : s) if (c != '[' && c != ']') t += c;
+		s = t;
 	}
 	return s;
 }

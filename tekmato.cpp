@@ -25,13 +25,20 @@ static void command_help()
 	     << "all four formats (SSSD, SSDD, DSSD, DSDD), as raw .img or ImageDisk .imd." << endl
 	     << "Paths are '/'-separated from the volume root; changes stay in memory" << endl
 	     << "until -save or -saveas." << endl << endl
+	     << "Names may end in an abbreviation, as DOS/50's commands do: ATT[RIBUTE]" << endl
+	     << "answers to ATT, ATTR, ... ATTRIBUTE, and DS[] only to DS. To refer to an" << endl
+	     << "existing file, tekmato accepts any abbreviation (-read 8301/COMMANDS/ATTR);" << endl
+	     << "DOS/50 itself does so only for commands, and in a path needs the full name." << endl
+	     << "To create one, give the bracketed name in quotes, since brackets are shell" << endl
+	     << "wildcards: -write ds.ovl '8301/DS[]'." << endl << endl
 	     << "Commands:" << endl;
 	for (auto &c : cmd_map) { c.second->help(); cout << endl; }
 	cout << "Examples:" << endl
 	     << "  tekmato -open System.imd -info -list" << endl
 	     << "  tekmato -open System.imd -type 8301/COMMANDS/HELP" << endl
 	     << "  tekmato -open work.img -write hello.asm HELLO.ASM text -save" << endl
-	     << "  tekmato -new 256 PROJECT -import ./src SRC text -saveas project.img" << endl;
+	     << "  tekmato -new 256 PROJECT -import ./src SRC text -saveas project.img" << endl
+	     << "  tekmato -open sys.img -write ds.ovl '8301/8086/DS[]' -save" << endl;
 }
 
 int main(int argc, char *argv[])

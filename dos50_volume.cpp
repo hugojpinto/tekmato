@@ -337,10 +337,18 @@ int volume::resolve_parent(const std::string &path, std::string &leaf, std::stri
 	return id;
 }
 
+// A name may end in one abbreviation pair, as DOS/50's command files do: ATT[RIBUTE] (the
+// part before '[' is the shortest accepted form) or DS[] (no abbreviation)
 bool volume::valid_name(const std::string &n)
 {
 	if (n.empty() || n.size() > NAME_LEN) return false;
-	for (unsigned char c : n) if (c <= ' ' || c >= 0x7f || c == '/' || c == '[' || c == ']' || c == '*' || c == '?') return false;
+	const size_t lb = n.find('[');
+	if (lb != std::string::npos && (lb == 0 || n.back() != ']' || n.find('[', lb + 1) != std::string::npos)) return false;
+	for (size_t i = 0; i < n.size(); i++) {
+		const unsigned char c = (unsigned char)n[i];
+		if (c <= ' ' || c >= 0x7f || c == '/' || c == '*' || c == '?') return false;
+		if ((c == '[' && i != lb) || (c == ']' && (lb == std::string::npos || i != n.size() - 1))) return false;
+	}
 	return true;
 }
 

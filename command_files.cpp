@@ -111,8 +111,8 @@ void command_export::help()
 {
 	cout << " -export [<directory>] [<path>] [text]" << endl
 	     << "\tCopy a DOS/50 directory tree (default: the whole volume) into a" << endl
-	     << "\tlocal directory (default: current). Abbreviation brackets are" << endl
-	     << "\tdropped from names. 'text' converts every file's CR to LF." << endl;
+	     << "\tlocal directory (default: current). Names keep their abbreviation" << endl
+	     << "\tbrackets (ATT[RIBUTE]). 'text' converts every file's CR to LF." << endl;
 }
 
 static bool mkdir_p(const string &d)

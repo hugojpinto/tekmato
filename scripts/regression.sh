@@ -22,8 +22,8 @@ expect() {  # expect "description" "needle" command...
 
 # ---- 1. reading the collection (originals are never written)
 expect "System label"        "Volume         SYSTEM"   "$T" -open "$DISKS/System.imd" -info
-expect "System free blocks"  "Free blocks    245"      "$T" -open "$MDL/disks/System_helpfix.img" -info
-expect "System files used"   "Files used     224"      "$T" -open "$MDL/disks/System_helpfix.img" -info   # = LDIR
+expect "System free blocks"  "Free blocks    245"      "$T" -open "$MDL/disks/System_Fixed.img" -info
+expect "System files used"   "Files used     223"      "$T" -open "$MDL/disks/System_Fixed.img" -info   # = LDIR
 expect "System orphans"      "88 orphan files"         "$T" -open "$DISKS/System.imd" -check
 expect "8085 disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-4641-03_8300E06_8085_Emulator_V2.1_DOS50.imd" -check
 expect "PROM disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-6036-01_8550F30_prom_programmer_2.1_1982.imd" -check
@@ -32,8 +32,13 @@ expect "DIAG 2.4 clean"      "volume is consistent"    "$T" -open "$DISKS/062-54
 expect "DIAG lost blocks"    "24 blocks marked in use" "$T" -open "$DISKS/8550_DIAG.IMD" -check
 expect "DOS/50 calendar"     "CREATION=02-OCT-80/08:52:43" "$T" -open "$DISKS/System.imd" -attrib 8501.SAV
 expect "abbreviated name"    "ATT[RIBUTE]"             "$T" -open "$DISKS/System.imd" -list 8301/COMMANDS flat
-expect "abbreviation lookup" "Alters or displays file attributes" "$T" -open "$MDL/disks/System_helpfix.img" -type 8301/COMMANDS/HELP
+expect "abbreviation lookup" "Alters or displays file attributes" "$T" -open "$MDL/disks/System_Fixed.img" -type 8301/COMMANDS/HELP
 expect "hard links counted"  "LINK=7"                  "$T" -open "$DISKS/System.imd" -attrib 8301/COMMANDS/ATT
+# abbreviation brackets in new names: one trailing pair, as DOS/50's command files have
+expect "bracket name written" "DS[]"                   "$T" -new 64 B -write "$HERE/README.md" 'DS[]' -write "$HERE/README.md" 'HE[LLO]' -list
+expect "bracket name lookup"  "HELL ->"                "$T" -new 64 B -write "$HERE/README.md" 'HE[LLO]' -read HELL /dev/null
+expect "bad bracket refused"  "invalid DOS/50 name"    "$T" -new 64 B -write "$HERE/README.md" 'A[B]C'
+expect "8086 overlays export" "BK[]"                   bash -c "'$T' -open '$DISKS/8550_8086.IMD' -export '$W/x86' >/dev/null 2>&1; ls '$W/x86/VERSION2'"
 
 # ---- 2. image round trips
 "$T" -open "$DISKS/System.imd" -saveas "$W/s.img" -saveas "$W/s.imd" >/dev/null 2>&1
@@ -80,12 +85,15 @@ grep -q "disc full" "$W/full.log" && grep -q "volume is consistent" "$W/full.log
 # ---- 5. DOS/50 itself (needs ../MDL/emu/build/tek8550)
 EMU="$MDL/emu/build/tek8550"
 if [ -x "$EMU" ]; then
-	"$T" -new 256 TEKMATO -mkdir SRC -write "$W/a.txt" SRC/A.TXT text -saveas "$W/d1.img" >/dev/null 2>&1
-	cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
-	(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/d1.img" -cycles $((70*2000000)) \
+	printf 'BRACKETS OK\n' > "$W/b.txt"
+	"$T" -new 256 TEKMATO -mkdir SRC -write "$W/a.txt" SRC/A.TXT text -write "$W/b.txt" 'SRC/BR[ACKET]' text -saveas "$W/d1.img" >/dev/null 2>&1
+	cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
+	(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/d1.img" -cycles $((75*2000000)) \
 		-type 32 'COPY /VOL/TEKMATO/SRC/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TEKMATO/K\r' \
-		-type 48 'CREATE /VOL/TEKMATO/NEW\r' -type 56 'DELETE:N /VOL/TEKMATO/SRC/A.TXT\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/emu.log"
+		-type 48 'CREATE /VOL/TEKMATO/NEW\r' -type 56 'DELETE:N /VOL/TEKMATO/SRC/A.TXT\r' \
+		-type 62 'COPY /VOL/TEKMATO/SRC/BR[ACKET] CONO\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/emu.log"
 	grep -q "LINE TWO" "$W/emu.log" && ok || bad "DOS/50 reads a tekmato file"
+	grep -q "BRACKETS OK" "$W/emu.log" && ok || bad "DOS/50 reads a tekmato bracket name"
 	grep -q "Error" "$W/emu.log" && bad "DOS/50 reported an error: $(grep Error "$W/emu.log" | head -1)" || ok
 	"$T" -open "$W/d1.img" -check -list > "$W/after.log" 2>&1
 	grep -q "volume is consistent" "$W/after.log" && grep -q " K " "$W/after.log" && grep -q "NEW/" "$W/after.log" && ok || { bad "DOS/50's writes read back"; cat "$W/after.log" | tail -8; }
@@ -95,8 +103,9 @@ if [ -x "$EMU" ]; then
 		case $g in sssd) recs=1989; opt=":S"; want=1001;; ssdd) recs=1989; opt=""; want=1989;;
 		           dssd) recs=3991; opt=":S"; want=2002;; dsdd) recs=3991; opt=""; want=3991;; esac
 		head -c $((recs*256)) /dev/zero > "$W/f_$g.img"
-		cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
-		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/f_$g.img" -cycles $((100*2000000)) \
+		cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
+		# the controller formats at the drive's real speed: two-sided discs need ~2.5 minutes
+		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/f_$g.img" -cycles $((240*2000000)) \
 			-type 32 "FORMAT${opt}:N /DEV/FLX1 100 FMT\\r" </dev/null >/dev/null 2>&1)
 		[ $(( $(wc -c < "$W/f_$g.img") / 256 )) -eq $want ] && ok || bad "$g: FORMAT left $(( $(wc -c < "$W/f_$g.img") / 256 )) records, wanted $want"
 		expect "$g FORMAT volume clean" "volume is consistent" "$T" -open "$W/f_$g.img" -check
@@ -110,7 +119,7 @@ same = len(a) == len(b) and la[:16] == lb[:16] and la[0x2a:0x36] == lb[0x2a:0x36
 sys.exit(0 if same else 1)
 PY
 		"$T" -new 64 TK $g -write "$W/a.txt" A.TXT text -saveas "$W/tk_$g.imd" >/dev/null 2>&1
-		cp "$MDL/disks/System_helpfix.img" "$W/d0.img"
+		cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
 		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/tk_$g.imd" -cycles $((60*2000000)) \
 			-type 32 'COPY /VOL/TK/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TK/K\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/e_$g.log"
 		grep -q "LINE TWO" "$W/e_$g.log" && ! grep -q "Error" "$W/e_$g.log" && ok || bad "$g: DOS/50 on a tekmato .imd"

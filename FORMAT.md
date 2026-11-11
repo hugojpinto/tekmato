@@ -98,7 +98,7 @@ A directory's data is an array of 16-byte entries: a file id (2 bytes) followed 
 
 **Hard links** are normal: SYSTEM's command directories (`COMMANDS`, `NO.EMULATOR`, `Z80`, `8085`…) share their command files, so `ATTRIBUTE` has LINK=7.
 
-**Names** may carry an abbreviation, as in `ATT[RIBUTE]`, `L[DIR]` and `COP[Y]`. The part before `[` is the shortest form accepted, and DOS/50 matches any prefix of the full name at least that long. Lower case is legal (`hugo` on SYSTEM).
+**Names** may carry an abbreviation, as in `ATT[RIBUTE]`, `L[DIR]`, `COP[Y]` and `DS[]` (no abbreviation). The part before `[` is the shortest form accepted, and DOS/50's **command lookup** matches any prefix of the full name at least that long. A file path does not: `COPY /VOL/X/BR[ACKET] CONO` finds the file, `COPY /VOL/X/BRAC CONO` and `.../BRACKET` give "Error 1D File not found" (checked in the emulator, 2026-11-11). tekmato's own lookups accept the abbreviations too, as a convenience. Lower case is legal (`hugo` on SYSTEM).
 
 ## Time
 
