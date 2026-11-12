@@ -177,20 +177,21 @@ if [ -d "$TK" ]; then
 	if [ -x "$E8002" ]; then
 		run8002() { "$E8002" -prom "$T8002/roms/tekdos_boot.bin" -rw "$@" </dev/null 2>/dev/null | tr -d '\000\007' | tr '\r' '\n'; }
 		# TEKDOS boots from the rebuilt system disc
-		run8002 -0 "$W/rebuilt.img" -cycles $((25*1250000)) -type 6 'LDIR\r' > "$W/tkboot.log"
+		run8002 -0 "$W/rebuilt.img" -cycles $((200*1250000)) -type prompt 'LDIR\r' > "$W/tkboot.log"
 		grep -q "REBUILT" "$W/tkboot.log" && grep -q "TOTAL FILES" "$W/tkboot.log" && ok || bad "TEKDOS boots a tekmato-built system disc"
 		# TEKDOS reads, copies and deletes on a tekmato disc; tekmato reads its writes back
 		cp "$TK/TekDOS_3.3_6800_cpy1.img" "$W/tsys.img"; chmod u+w "$W/tsys.img"
 		"$T" -new 'TEKMATO' tkdos-sssd -write "$W/a.txt" 'A;S' text -write "$W/b.bin" 'B%O' -saveas "$W/t1.img" >/dev/null 2>&1
-		run8002 -0 "$W/tsys.img" -1 "$W/t1.img" -cycles $((60*1250000)) -type 6 'LDIR 1\r' -type 18 'COPY A;S/1 CONO\r' \
-			-type 26 'COPY A;S/1 COPIED/1\r' -type 36 'DELETE B%O/1\r' > "$W/tkemu.log"
+		run8002 -0 "$W/tsys.img" -1 "$W/t1.img" -cycles $((600*1250000)) -type prompt 'LDIR 1\r' -type prompt 'COPY A;S/1 CONO\r' \
+			-type prompt 'COPY A;S/1 COPIED/1\r' -type prompt 'DELETE B%O/1\r' > "$W/tkemu.log"
 		grep -q "LINE TWO" "$W/tkemu.log" && ok || bad "TEKDOS reads a tekmato file"
 		grep -q "ERROR" "$W/tkemu.log" && bad "TEKDOS reported an error: $(grep ERROR "$W/tkemu.log" | head -1)" || ok
 		"$T" -open "$W/t1.img" -check -list > "$W/tkafter.log" 2>&1
 		grep -q "volume is consistent" "$W/tkafter.log" && grep -q "COPIED" "$W/tkafter.log" && ! grep -q "B%O" "$W/tkafter.log" && ok || { bad "TEKDOS's writes read back"; tail -8 "$W/tkafter.log"; }
 		# TEKDOS's own FORMAT equals -new
-		head -c 315392 /dev/zero > "$W/blank.img"
-		run8002 -0 "$W/tsys.img" -1 "$W/blank.img" -cycles $((400*1250000)) -type 6 'FORMAT 1 FORMATTED\r' >/dev/null
+		# (on a never-formatted disc, new:, and typed at TEKDOS's prompt: the emulator runs the
+		# real disc controller, whose timings are the drive's)
+		run8002 -0 "$W/tsys.img" -1 "new:$W/blank.img" -cycles $((2000*1250000)) -type prompt 'FORMAT 1 FORMATTED\r' >/dev/null
 		cmp -s "$W/blank.img" "$W/fmt.img" && ok || bad "TEKDOS FORMAT differs from -new tkdos-sssd"
 	else
 		echo "(skipping TEKDOS cross-check: $E8002 not built)"
