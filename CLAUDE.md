@@ -6,24 +6,24 @@ tekmato is a command-line tool for Tektronix development-lab disc images: DOS/50
 - **Model:** tekmato reuses the ideas, syntax and command structure of tomato (`../../tomato`, a Timex TOS/CP/M tool) but none of its code. It does not support TOS or CP/M, and it should stay that way.
 
 ## Layout
-| File | What |
-|---|---|
-| `dos50_volume.{hpp,cpp}` | the DOS/50 file system: image I/O (raw and IMD), label, bitmaps, descriptors, directories, allocation, check |
-| `tekdos_volume.{hpp,cpp}` | the TEKDOS file system: header, directory, block maps, module headers, allocation, check |
-| `command.{hpp,cpp}` | base `command` class (shared open volume — `vol` for DOS/50, `tvol` for TEKDOS, `tk` says which — helpers), one `DECLARE_COMMAND` per CLI command, version. Each command handles TEKDOS at the top of `process`; DOS/50-only ones call `dos50_only()` |
-| `command_image.cpp` | `-open -new -save -saveas -info -rename -owner` |
-| `command_list.cpp` | `-list` |
-| `command_files.cpp` | `-read -type -write -export -import` |
-| `command_tree.cpp` | `-delete -mkdir -link -move -attrib -check` |
-| `tekmato.cpp` | `cmd_map` dispatcher, help (as tomato: `-cmd args… -cmd args…`, prints `C : name`, errors `E :`, info `I :`) |
-| `FORMAT.md`, `FORMAT-TEKDOS.md` | **the on-disk formats and the evidence for each fact.** Update them whenever a field is newly understood |
-| `scripts/regression.sh` | 95 checks (section 6: TEKDOS). Run it after any change (`make test`) |
+Four layers, each knowing only the one below (as tomato's `disk_filesystem`, without its kind switch):
+
+| Layer | Files | What |
+|---|---|---|
+| commands | `command.{hpp,cpp}`, `command_image.cpp` (`-open -new -save -saveas -info -rename -owner`), `command_list.cpp`, `command_files.cpp` (`-read -type -write -export -import`), `command_tree.cpp` (`-delete -mkdir -link -move -attrib -check`), `tekmato.cpp` (`cmd_map` dispatcher, help; as tomato: `-cmd args… -cmd args…`, prints `C : name`, errors `E :`, info `I :`) | the CLI. Commands hold one `std::unique_ptr<tekmato::filesystem> fs` and **never ask which file system is open** |
+| interface | `filesystem.{hpp,cpp}` | `tekmato::filesystem` (identity, names, a tree of `node`s, files, optional features that refuse by default, reports) and the **format registry** (`formats()`, `find_format`, `open_image`) |
+| adapters | `dos50_fs.cpp`, `tekdos_fs.cpp` | one `filesystem` per family, private to its file; they expose only their open/create functions (declared in `filesystem.hpp`). Each prints its own `-info`, `-list` and `-check` columns |
+| volumes | `dos50_volume.{hpp,cpp}`, `tekdos_volume.{hpp,cpp}` | the on-disk formats, free of tekmato: image I/O, labels, maps, directories, allocation, check |
+
+Docs and tests: `FORMAT.md` (DOS/50) and `FORMAT-TEKDOS.md` are **the on-disk formats and the evidence for each fact**; update them whenever a field is newly understood. `scripts/regression.sh` has 97 checks (section 6: TEKDOS); run it after any change (`make test`).
 
 Adding a command means:
 1. adding `DECLARE_COMMAND(x)` in `command.hpp`;
-2. implementing it in the matching `command_*.cpp`;
+2. implementing it in the matching `command_*.cpp` against `filesystem` only (a new capability is a `filesystem` method with a refusing default);
 3. adding an entry in `cmd_map`;
 4. adding a check in `regression.sh`.
+
+Adding a file system means: its volume class, an adapter `x_fs.cpp` with `open_x`/`create_x` (and a probe if its images can be recognised), and its lines in `formats()`/`open_image()`. No command changes.
 
 ## Rules
 - **Fidelity:** DOS/50 and TEKDOS must accept everything tekmato writes. The regression runs DOS/50 in `../MDL/emu/build/tek8550` and TEKDOS in `../tektronix-8002-emulator/emu/build/tek8002` against tekmato-made volumes; keep both passing.

@@ -149,7 +149,9 @@ if [ -d "$TK" ]; then
 	"$T" -new FORMATTED tkdos-sssd -saveas "$W/fmt.img" >/dev/null 2>&1
 	cmp -s "$W/fmt.img" "$B/Tek8002_1b.img" && ok || bad "-new tkdos-sssd differs from a FORMATTED disc"
 	expect "no IMD for TEKDOS"     "ImageDisk cannot hold"     "$T" -new X tkdos-sssd -saveas "$W/x.imd"
-	expect "TEKDOS flat"           "one flat directory"        "$T" -new X tkdos-sssd -mkdir A
+	expect "TEKDOS flat"           "TEKDOS discs have no directories" "$T" -new X tkdos-sssd -mkdir A
+	expect "TEKDOS no links"       "TEKDOS discs have no links"  "$T" -new X tkdos-sssd -write "$W/a.txt" A -link A B
+	expect "TEKDOS no attributes"  "TEKDOS discs have no file attributes" "$T" -new X tkdos-sssd -write "$W/a.txt" A -attrib A
 	expect "TEKDOS name rule"      "start with a letter"       "$T" -new X tkdos-sssd -write "$W/a.txt" 1A
 	expect "TEKDOS default name"   "-> A;TX"                   "$T" -new X tkdos-sssd -write "$W/a.txt" text
 	# edits, checked after every step

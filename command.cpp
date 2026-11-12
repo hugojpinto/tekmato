@@ -1,31 +1,20 @@
 // Shared state and helpers for the tekmato commands.
 #include "command.hpp"
-#include <cctype>
 #include <fstream>
 #include <iterator>
-#include <cstring>
 
 const char *const TEKMATO_VERSION = "0.3.0";
 const char *const TEKMATO_VERSION_DATE = "2026-11-12";
 
 int command::status = 0;
-dos50::volume command::vol;
-tekdos::volume command::tvol;
-bool command::tk = false;
+std::unique_ptr<tekmato::filesystem> command::fs;
 bool command::dirty = false;
 std::string command::owner = "NO.NAME";
 
 bool command::need_volume()
 {
-	if (tk ? tvol.loaded() : vol.loaded()) return true;
+	if (fs) return true;
 	error("no volume open (use -open FILE or -new first)");
-	return false;
-}
-
-bool command::dos50_only(const char *what)
-{
-	if (!tk) return true;
-	error(std::string(what) + ": TEKDOS discs have one flat directory, no " + (std::string(what) == "-attrib" ? "attributes" : "directories or links"));
 	return false;
 }
 
@@ -35,7 +24,7 @@ void command::error(const std::string &msg)
 	status = 2;
 }
 
-bool command::host_read(const std::string &path, std::vector<dos50::u8> &out, std::string &err)
+bool command::host_read(const std::string &path, bytes &out, std::string &err)
 {
 	std::ifstream f(path, std::ios::binary);
 	if (!f) { err = "cannot open " + path; return false; }
@@ -43,7 +32,7 @@ bool command::host_read(const std::string &path, std::vector<dos50::u8> &out, st
 	return true;
 }
 
-bool command::host_write(const std::string &path, const std::vector<dos50::u8> &data, std::string &err)
+bool command::host_write(const std::string &path, const bytes &data, std::string &err)
 {
 	std::ofstream f(path, std::ios::binary | std::ios::trunc);
 	if (!f) { err = "cannot write " + path; return false; }
@@ -52,15 +41,14 @@ bool command::host_write(const std::string &path, const std::vector<dos50::u8> &
 	return true;
 }
 
-// DOS/50 text files end lines with CR alone
-void command::to_text_host(std::vector<dos50::u8> &d)
+void command::text_to_host(bytes &d)
 {
 	for (auto &c : d) if (c == '\r') c = '\n';
 }
 
-void command::to_text_dos50(std::vector<dos50::u8> &d)
+void command::text_to_disc(bytes &d)
 {
-	std::vector<dos50::u8> o;
+	bytes o;
 	o.reserve(d.size());
 	for (size_t i = 0; i < d.size(); i++) {
 		if (d[i] == '\r' && i + 1 < d.size() && d[i + 1] == '\n') continue;
@@ -69,38 +57,23 @@ void command::to_text_dos50(std::vector<dos50::u8> &d)
 	d.swap(o);
 }
 
-// host file names keep DOS/50's abbreviation brackets (legal on every host file system), so
-// an export imports back unchanged
-std::string command::host_name(const std::string &n)
+bool command::take_flag(std::list<std::string> &pars, const std::string &flag)
 {
-	return n;
+	for (auto it = pars.begin(); it != pars.end(); ++it)
+		if (*it == flag) { pars.erase(it); return true; }
+	return false;
 }
 
-std::string command::dos50_name(const std::string &h)
+bool command::put_file(const std::string &src, std::string dest, bool text, std::string &err, int *id)
 {
-	std::string base = h.substr(h.find_last_of('/') + 1), s;
-	for (unsigned char c : base) {
-		if (s.size() == size_t(dos50::NAME_LEN)) break;
-		if (c > ' ' && c < 0x7f && c != '/' && c != '*' && c != '?') s += char(c);
-		else if (c == ' ') s += '_';
-	}
-	if (!dos50::volume::valid_name(s)) {        // brackets that are not one abbreviation pair: drop them
-		std::string t;
-		for (char c : s) if (c != '[' && c != ']') t += c;
-		s = t;
-	}
-	return s;
-}
-
-// TEKDOS names: upper case A-Z 0-9 and ! " # % & ' ( ) * ; = ? @, a letter first, 8 at most
-std::string command::tekdos_name(const std::string &h)
-{
-	std::string base = h.substr(h.find_last_of('/') + 1), s;
-	for (unsigned char c : base) {
-		if (s.size() == size_t(tekdos::NAME_LEN)) break;
-		c = static_cast<unsigned char>(toupper(c));
-		if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (!s.empty() && std::strchr("!\"#%&'()*;=?@", c))) s += char(c);
-		else if (c == '.' && !s.empty()) s += ';';     // HELLO.ASM -> HELLO;AS (the suffix convention: ;S %S ...)
-	}
-	return s;
+	bytes data;
+	if (!host_read(src, data, err)) return false;
+	if (text) text_to_disc(data);
+	if (dest.empty() || dest.back() == '/') dest += fs->name_from_host(src);
+	std::string leaf;
+	int dir = fs->resolve_parent(dest, leaf, err);
+	if (dir < 0) return false;
+	int n = fs->write_file(dir, leaf, data, err);
+	if (id) *id = n;
+	return n >= 0;
 }

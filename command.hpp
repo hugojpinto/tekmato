@@ -1,9 +1,9 @@
-// tekmato commands: one class per CLI command, dispatched by tekmato.cpp
-// (the same pattern as tomato's command_<name> classes).
+// tekmato commands: one class per CLI command, dispatched by tekmato.cpp (the same
+// pattern as tomato's command_<name> classes). Commands reach the disc only through
+// tekmato::filesystem (filesystem.hpp): none of them knows which file system is open.
 #ifndef TEKMATO_COMMAND_HPP
 #define TEKMATO_COMMAND_HPP
-#include "dos50_volume.hpp"
-#include "tekdos_volume.hpp"
+#include "filesystem.hpp"
 #include <iostream>
 #include <list>
 #include <memory>
@@ -20,22 +20,22 @@ public:
 	static int status;                       // 0 ok, 2 an error occurred
 
 protected:
-	static dos50::volume vol;                 // the open volume, shared by every command
-	static tekdos::volume tvol;               // ... or the open TEKDOS volume (8002 discs)
-	static bool tk;                           // a TEKDOS volume is open
-	bool dos50_only(const char *what);        // false (with an error) on a TEKDOS volume
+	using bytes = tekmato::bytes;
+	static std::unique_ptr<tekmato::filesystem> fs;   // the open volume, shared by every command
 	static bool dirty;                        // modified since -open / -save
-	static std::string owner;                 // owner for new files (-owner)
+	static std::string owner;                 // owner for new files (-owner; DOS/50)
 	bool need_volume();
 	void error(const std::string &msg);
 	void info(const std::string &msg) { std::cout << "I : " << msg << std::endl; }
-	static bool host_read(const std::string &path, std::vector<dos50::u8> &out, std::string &err);
-	static bool host_write(const std::string &path, const std::vector<dos50::u8> &data, std::string &err);
-	static void to_text_host(std::vector<dos50::u8> &d);    // CR -> LF
-	static void to_text_dos50(std::vector<dos50::u8> &d);   // LF / CR LF -> CR
-	static std::string host_name(const std::string &dos50_name);   // ATT[RIBUTE] -> ATTRIBUTE
-	static std::string dos50_name(const std::string &host_name);   // legal characters, 14 max (case kept)
-	static std::string tekdos_name(const std::string &host_name);  // upper case, legal characters, 8 max
+	static bool host_read(const std::string &path, bytes &out, std::string &err);
+	static bool host_write(const std::string &path, const bytes &data, std::string &err);
+	// both systems end text lines with CR alone
+	static void text_to_host(bytes &d);       // CR -> LF
+	static void text_to_disc(bytes &d);       // LF / CR LF -> CR
+	static bool take_flag(std::list<std::string> &pars, const std::string &flag);
+	// one host file onto the volume (-write, -import); a dest "" or ending in '/' takes a name
+	// made from the host file's; *id gets the file's id
+	static bool put_file(const std::string &src, std::string dest, bool text, std::string &err, int *id = nullptr);
 };
 
 #define DECLARE_COMMAND(name) \
