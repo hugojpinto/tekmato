@@ -80,7 +80,7 @@ tekmato -new WORK tkdos-sssd -write prog.asm 'PROG;S' text -saveas work.img
 ## With the MDL emulator
 ```
 tekmato -new 256 WORK -import ./src SRC text -saveas work.img
-../MDL/emu/build/tek8550 -rw -0 system.img -1 work.img
+../tektronix-8550-emulator/emu/build/tek8550 -rw -0 system.img -1 work.img
 > LDIR /VOL/WORK/SRC
 ```
 Not covered: making a DOS/50 disc bootable (copy a system disc and edit it instead), the bad-block maps (read only), and decoding object or load-module formats beyond TEKDOS's module header.

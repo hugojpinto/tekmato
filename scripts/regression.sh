@@ -5,7 +5,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 T="$HERE/tekmato"
-MDL="$HERE/../MDL"
+MDL="$HERE/../tektronix-8550-emulator"
 DISKS="$MDL/sources/bitsavers/disks"
 T8002="$HERE/../tektronix-8002-emulator"
 TK="$T8002/sources/bitsavers/disks"
@@ -86,7 +86,7 @@ head -c 1100000 /dev/zero > "$W/big"
 "$T" -open "$V" -write "$W/big" BIG -check > "$W/full.log" 2>&1
 grep -q "disc full" "$W/full.log" && grep -q "volume is consistent" "$W/full.log" && ok || { bad "disc full handling"; tail -4 "$W/full.log"; }
 
-# ---- 5. DOS/50 itself (needs ../MDL/emu/build/tek8550)
+# ---- 5. DOS/50 itself (needs ../tektronix-8550-emulator/emu/build/tek8550)
 EMU="$MDL/emu/build/tek8550"
 if [ -x "$EMU" ]; then
 	printf 'BRACKETS OK\n' > "$W/b.txt"
