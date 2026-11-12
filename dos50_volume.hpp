@@ -37,6 +37,7 @@ struct geometry {
 	int  cylinder(int t) const { return ds ? t / 2 : t; }
 	int  side(int t) const { return ds ? t % 2 : 0; }
 	std::string name() const { return std::string(ds ? "DS" : "SS") + (dd ? "DD" : "SD"); }
+	std::string format_name() const { return "dos50-" + std::string(ds ? "ds" : "ss") + (dd ? "dd" : "sd"); }
 	static bool from_records(size_t n, geometry &g);
 	static bool from_name(const std::string &n, geometry &g);
 };

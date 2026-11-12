@@ -3,6 +3,7 @@
 #ifndef TEKMATO_COMMAND_HPP
 #define TEKMATO_COMMAND_HPP
 #include "dos50_volume.hpp"
+#include "tekdos_volume.hpp"
 #include <iostream>
 #include <list>
 #include <memory>
@@ -20,6 +21,9 @@ public:
 
 protected:
 	static dos50::volume vol;                 // the open volume, shared by every command
+	static tekdos::volume tvol;               // ... or the open TEKDOS volume (8002 discs)
+	static bool tk;                           // a TEKDOS volume is open
+	bool dos50_only(const char *what);        // false (with an error) on a TEKDOS volume
 	static bool dirty;                        // modified since -open / -save
 	static std::string owner;                 // owner for new files (-owner)
 	bool need_volume();
@@ -31,6 +35,7 @@ protected:
 	static void to_text_dos50(std::vector<dos50::u8> &d);   // LF / CR LF -> CR
 	static std::string host_name(const std::string &dos50_name);   // ATT[RIBUTE] -> ATTRIBUTE
 	static std::string dos50_name(const std::string &host_name);   // legal characters, 14 max (case kept)
+	static std::string tekdos_name(const std::string &host_name);  // upper case, legal characters, 8 max
 };
 
 #define DECLARE_COMMAND(name) \

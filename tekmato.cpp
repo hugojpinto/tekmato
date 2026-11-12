@@ -1,4 +1,5 @@
-// tekmato -- TEKtronix MAnipulation TOol: DOS/50 disc images of the Tektronix 8550 MDL.
+// tekmato -- TEKtronix MAnipulation TOol: DOS/50 disc images of the Tektronix 8550 MDL and
+// TEKDOS disc images of the 8001/8002/8002A µProcessor Lab.
 // Same command-line model as tomato: -open an image, chain commands, -save.
 #include "command.hpp"
 #include <map>
@@ -20,11 +21,14 @@ static void print_banner() { cerr << endl << "TEKtronix MAnipulation TOol v" << 
 static void command_help()
 {
 	cout << "Usage: tekmato -open <image> [COMMANDS...]" << endl << endl
-	     << "Reads, writes and checks DOS/50 disc images of the Tektronix 8550" << endl
-	     << "Microcomputer Development Lab: 8501 Data Management Unit floppies in" << endl
-	     << "all four formats (SSSD, SSDD, DSSD, DSDD), as raw .img or ImageDisk .imd." << endl
-	     << "Paths are '/'-separated from the volume root; changes stay in memory" << endl
-	     << "until -save or -saveas." << endl << endl
+	     << "Reads, writes and checks Tektronix development-lab disc images:" << endl
+	     << "  dos50-sssd dos50-ssdd dos50-dssd dos50-dsdd  DOS/50 on the 8550 MDL's" << endl
+	     << "      8501 Data Management Unit floppies, raw .img or ImageDisk .imd" << endl
+	     << "  tkdos-sssd  TEKDOS on the 8002A µProcessor Lab's Flexible Disc Unit" << endl
+	     << "      (77 tracks x 32 hard sectors x 128 bytes), raw .img" << endl
+	     << "-open tells them apart by size. Paths are '/'-separated from the volume" << endl
+	     << "root (TEKDOS has one flat directory); changes stay in memory until" << endl
+	     << "-save or -saveas." << endl << endl
 	     << "Names may end in an abbreviation, as DOS/50's commands do: ATT[RIBUTE]" << endl
 	     << "answers to ATT, ATTR, ... ATTRIBUTE, and DS[] only to DS. To refer to an" << endl
 	     << "existing file, tekmato accepts any abbreviation (-read 8301/COMMANDS/ATTR);" << endl
@@ -38,7 +42,9 @@ static void command_help()
 	     << "  tekmato -open System.imd -type 8301/COMMANDS/HELP" << endl
 	     << "  tekmato -open work.img -write hello.asm HELLO.ASM text -save" << endl
 	     << "  tekmato -new 256 PROJECT -import ./src SRC text -saveas project.img" << endl
-	     << "  tekmato -open sys.img -write ds.ovl '8301/8086/DS[]' -save" << endl;
+	     << "  tekmato -open sys.img -write ds.ovl '8301/8086/DS[]' -save" << endl
+	     << "  tekmato -open TekDOS_3.3_6800_cpy1.img -list -type CONCO" << endl
+	     << "  tekmato -new 'WORK DISC' tkdos-sssd -write prog.asm PROG;S text -saveas work.img" << endl;
 }
 
 int main(int argc, char *argv[])

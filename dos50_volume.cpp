@@ -62,9 +62,10 @@ bool geometry::from_records(size_t n, geometry &g)
 
 bool geometry::from_name(const std::string &n, geometry &g)
 {
-	// lower case only, so upper-case volume names like "SSDD" stay names
-	std::string u;
-	for (char c : n) { if (isupper(static_cast<unsigned char>(c))) return false; u += char(toupper(static_cast<unsigned char>(c))); }
+	// dos50-sssd, dos50-ssdd, dos50-dssd, dos50-dsdd (the bare sssd ... dsdd of tekmato 0.2
+	// are still accepted); lower case only, so upper-case volume names like "SSDD" stay names
+	std::string u, s = n.compare(0, 6, "dos50-") == 0 ? n.substr(6) : n;
+	for (char c : s) { if (isupper(static_cast<unsigned char>(c))) return false; u += char(toupper(static_cast<unsigned char>(c))); }
 	if (u.size() != 4 || (u[0] != 'S' && u[0] != 'D') || u[1] != 'S' || (u[2] != 'S' && u[2] != 'D') || u[3] != 'D') return false;
 	g.ds = u[0] == 'D'; g.dd = u[2] == 'D';
 	return true;

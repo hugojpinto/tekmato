@@ -1,8 +1,15 @@
 # tekmato — TEKtronix MAnipulation TOol
 
-A command-line tool for reading, writing and checking **DOS/50 disc images** of the Tektronix 8550 Microcomputer Development Lab: the 8501 Data Management Unit's 8-inch floppies. All four formats are supported: single- or double-sided, single or double density. The standard disc was double-sided, double density.
+A command-line tool for reading, writing and checking Tektronix development-lab disc images:
 
-It follows [tomato](../../tomato)'s design: open an image, chain commands, save. It doesn't share any of tomato's Timex/TOS code. The DOS/50 file system it implements is documented in [FORMAT.md](FORMAT.md).
+| Format | Disc | Images |
+|---|---|---|
+| `dos50-dsdd` (the standard disc), `dos50-dssd`, `dos50-ssdd`, `dos50-sssd` | **DOS/50** on the 8550 MDL's 8501 Data Management Unit: 8-inch, single- or double-sided, single or double density | raw `.img`, ImageDisk `.imd` |
+| `tkdos-sssd` | **TEKDOS** on the 8001/8002/8002A µProcessor Lab's Flexible Disc Unit: 8-inch, single-sided, single density, 32 hard sectors | raw `.img` (315,392 bytes) |
+
+`-open` tells them apart by size. tekmato 0.2 called the DOS/50 formats `sssd`, `ssdd`, `dssd` and `dsdd`; `-new` still accepts those.
+
+It follows [tomato](../../tomato)'s design: open an image, chain commands, save. It doesn't share any of tomato's Timex/TOS code. The file systems are documented in [FORMAT.md](FORMAT.md) (DOS/50) and [FORMAT-TEKDOS.md](FORMAT-TEKDOS.md) (TEKDOS).
 
 > **Work on copies.** Changes stay in memory until `-save` or `-saveas`.
 
@@ -19,15 +26,17 @@ tekmato -open System.imd -type 8301/COMMANDS/HELP
 tekmato -open System.imd -export ./system text          # whole tree, CR -> LF
 tekmato -open work.img -write hello.asm SRC/HELLO.ASM text -save
 tekmato -new 256 PROJECT -import ./src SRC text -saveas project.img
-tekmato -new 64 SMALL sssd -saveas small.imd                 # single-sided, single density
+tekmato -new 64 SMALL dos50-sssd -saveas small.imd           # single-sided, single density
 tekmato -open System.imd -check
+tekmato -open TekDOS_3.3_6800_cpy1.img -list -type CONCO      # an 8002 TEKDOS disc
+tekmato -new 'WORK DISC' tkdos-sssd -write prog.asm 'PROG;S' text -saveas work.img
 ```
 Images can be raw (`.img`, as the MDL emulator uses) or ImageDisk (`.imd`). The size gives the geometry: SSSD 1001, SSDD 1989, DSSD 2002 or DSDD 3991 records of 256 bytes. `-saveas x.imd` writes the 8501's physical track format for the geometry.
 
 | Command | What it does | DOS/50 equivalent |
 |---|---|---|
 | `-open FILE` | open a raw or IMD image | — |
-| `-new [maxfiles] [volume] [sssd\|ssdd\|dssd\|dsdd]` | empty data volume, laid out exactly as DOS/50's FORMAT does (verified for all four; default dsdd) | `FORMAT`, `FORMAT:S` |
+| `-new [maxfiles] [volume] [format]` | empty volume, laid out exactly as the system's FORMAT does (verified for all five formats; default `dos50-dsdd`) | `FORMAT`, `FORMAT:S` |
 | `-save`, `-saveas FILE` | write the image | — |
 | `-info` | geometry, label, layout, free space | `LDIR` totals |
 | `-list [dir] [flat] [ids]` | tree with size, blocks, links, capabilities, owner, date | `LDIR` |
@@ -55,10 +64,23 @@ Images can be raw (`.img`, as the MDL emulator uses) or ImageDisk (`.imd`). The 
 
 **Timestamps** use DOS/50's own calendar (31-day months, see FORMAT.md), so the dates tekmato writes are shown correctly by `ATTRIBUTE`.
 
+## TEKDOS discs
+TEKDOS has one flat directory of at most 78 files, so `-mkdir`, `-link` and `-attrib` don't apply, and `-move` renames. Names are 1–8 characters from A–Z, 0–9 and `! " # % & ' ( ) * ; = ? @`, starting with a letter. With no name given, `-write` makes one from the host name: upper case, at most 8 characters, `.` as `;` (`hello.asm` → `HELLO;AS`). `-list` shows what TEKDOS's `LDIR /` shows: blocks, sectors and bytes in the last sector, plus the IDENT, LOAD and START of load modules. `-export` writes the system overlay file `.` as `SYSTEM.SOF`, and `-import` puts it back, so an exported system disc imported into a `-new tkdos-sssd` disc boots.
+
+Checked against TEKDOS 3.3 running in the [8002 emulator](../tektronix-8002-emulator):
+- `-new tkdos-sssd` equals TEKDOS's own FORMAT byte for byte, and both equal a real formatted disc from the bitsavers collection;
+- TEKDOS lists, prints, copies and deletes files tekmato wrote, and tekmato reads TEKDOS's changes back;
+- a system disc rebuilt with `-import` boots.
+```
+tekmato -new WORK tkdos-sssd -write prog.asm 'PROG;S' text -saveas work.img
+../tektronix-8002-emulator/emu/build/tek8002 -rw -0 system.img -1 work.img
+> LDIR 1
+```
+
 ## With the MDL emulator
 ```
 tekmato -new 256 WORK -import ./src SRC text -saveas work.img
 ../MDL/emu/build/tek8550 -rw -0 system.img -1 work.img
 > LDIR /VOL/WORK/SRC
 ```
-Not covered: making a disc bootable (copy a system disc and edit it instead), the bad-block map (read only), and decoding object or load-module file formats.
+Not covered: making a DOS/50 disc bootable (copy a system disc and edit it instead), the bad-block maps (read only), and decoding object or load-module formats beyond TEKDOS's module header.

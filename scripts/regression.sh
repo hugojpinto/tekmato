@@ -1,12 +1,14 @@
 #!/bin/bash
-# tekmato regression: invariants on the MDL disc collection, round trips, and
-# (if the MDL emulator is built next door) DOS/50 itself reading and writing
-# volumes made by tekmato. Usage: scripts/regression.sh   (from the tekmato dir)
+# tekmato regression: invariants on the MDL and 8002 disc collections, round trips,
+# and (if the emulators are built next door) DOS/50 and TEKDOS themselves reading
+# and writing volumes made by tekmato. Usage: scripts/regression.sh   (from the tekmato dir)
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 T="$HERE/tekmato"
 MDL="$HERE/../MDL"
 DISKS="$MDL/sources/bitsavers/disks"
+T8002="$HERE/../tektronix-8002-emulator"
+TK="$T8002/sources/bitsavers/disks"
 W="$(mktemp -d)"
 trap 'rm -rf "$W"' EXIT
 pass=0; fail=0
@@ -111,7 +113,7 @@ if [ -x "$EMU" ]; then
 			-type 32 "FORMAT${opt}:N /DEV/FLX1 100 FMT\\r" </dev/null >/dev/null 2>&1)
 		[ $(( $(wc -c < "$W/f_$g.img") / 256 )) -eq $want ] && ok || bad "$g: FORMAT left $(( $(wc -c < "$W/f_$g.img") / 256 )) records, wanted $want"
 		expect "$g FORMAT volume clean" "volume is consistent" "$T" -open "$W/f_$g.img" -check
-		"$T" -new 100 FMT $g -saveas "$W/n_$g.img" >/dev/null 2>&1
+		"$T" -new 100 FMT dos50-$g -saveas "$W/n_$g.img" >/dev/null 2>&1
 		python3 -I - "$W/f_$g.img" "$W/n_$g.img" <<'PY' && ok || bad "$g: -new differs from FORMAT"
 import sys, struct
 a, b = (open(f, 'rb').read() for f in sys.argv[1:3])
@@ -120,7 +122,7 @@ bm = struct.unpack_from('<H', la, 0x2a)[0]
 same = len(a) == len(b) and la[:16] == lb[:16] and la[0x2a:0x36] == lb[0x2a:0x36] and a[bm * 512:(bm + 3) * 512] == b[bm * 512:(bm + 3) * 512]
 sys.exit(0 if same else 1)
 PY
-		"$T" -new 64 TK $g -write "$W/a.txt" A.TXT text -saveas "$W/tk_$g.imd" >/dev/null 2>&1
+		"$T" -new 64 TK dos50-$g -write "$W/a.txt" A.TXT text -saveas "$W/tk_$g.imd" >/dev/null 2>&1
 		cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
 		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/tk_$g.imd" -cycles $((60*2000000)) \
 			-type 32 'COPY /VOL/TK/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TK/K\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/e_$g.log"
@@ -129,6 +131,70 @@ PY
 	done
 else
 	echo "(skipping DOS/50 cross-check: $EMU not built)"
+fi
+
+# ---- 6. TEKDOS (8002A) discs (needs ../tektronix-8002-emulator; its emulator for the last part)
+if [ -d "$TK" ]; then
+	B="$TK/Tek8002_Belgium_Amusements"
+	expect "old format name kept" "Format         dos50-sssd" "$T" -new 64 X sssd -info
+	expect "TEKDOS opened by size" "TEKDOS volume SYS 680X"    "$T" -open "$B/Tek8002_1a.img"
+	# Tek8002_1a.jpg is a printout of LDIR / for this disc
+	expect "TEKDOS list as LDIR /" "EFE           3   17  128   OLD 20F + 5F V 8606           7800-7FFF  709C" "$T" -open "$B/Tek8002_1a.img" -list
+	expect "TEKDOS totals"         "BLOCKS AVAILABLE     0"    "$T" -open "$B/Tek8002_1a.img" -list
+	expect "TEKDOS text file"      'STITLE	"MODULE : EDEF'    "$T" -open "$B/Tek8002_1a.img" -type 'EDEF%S'
+	n=0; for f in "$TK"/*.img "$B"/*.img "$TK"/*/tekdos*.img; do "$T" -open "$f" -check 2>&1 | grep -q "volume is consistent" && n=$((n+1)); done
+	[ "$n" -eq 29 ] && ok || bad "TEKDOS collection: $n of 33 consistent, wanted 29"
+	expect "TEKDOS stale count"    "sector 0 counts 34 files, the directory names 50" "$T" -open "$B/Tek8002_18.img" -check
+	# -new equals the disc TEKDOS's FORMAT left (Tek8002_1b, labelled FORMATTED)
+	"$T" -new FORMATTED tkdos-sssd -saveas "$W/fmt.img" >/dev/null 2>&1
+	cmp -s "$W/fmt.img" "$B/Tek8002_1b.img" && ok || bad "-new tkdos-sssd differs from a FORMATTED disc"
+	expect "no IMD for TEKDOS"     "ImageDisk cannot hold"     "$T" -new X tkdos-sssd -saveas "$W/x.imd"
+	expect "TEKDOS flat"           "one flat directory"        "$T" -new X tkdos-sssd -mkdir A
+	expect "TEKDOS name rule"      "start with a letter"       "$T" -new X tkdos-sssd -write "$W/a.txt" 1A
+	expect "TEKDOS default name"   "-> A;TX"                   "$T" -new X tkdos-sssd -write "$W/a.txt" text
+	# edits, checked after every step
+	V="$W/tk.img"
+	"$T" -new EDITS tkdos-sssd -saveas "$V" >/dev/null 2>&1
+	step -write "$W/a.txt" 'SRC;S' text
+	step -write "$W/b.bin" 'BIN%O'
+	"$T" -open "$V" -read 'BIN%O' "$W/b.out" >/dev/null 2>&1; cmp -s "$W/b.bin" "$W/b.out" && ok || bad "TEKDOS binary round trip"
+	step -move 'SRC;S' 'MAIN;S'
+	step -write "$W/a.txt" 'BIN%O' text
+	expect "TEKDOS replace shrinks" "BIN%O         1    1   18" "$T" -open "$V" -list
+	step -delete 'MAIN;S' 'BIN%O'
+	expect "TEKDOS all freed"      "Free blocks    288"        "$T" -open "$V" -info
+	"$T" -open "$V" -write "$W/big" BIG -check > "$W/tkfull.log" 2>&1
+	grep -q "disc full" "$W/tkfull.log" && grep -q "volume is consistent" "$W/tkfull.log" && ok || { bad "TEKDOS disc full"; tail -3 "$W/tkfull.log"; }
+	# export / import / export of a system disc: same files
+	"$T" -open "$TK/TekDOS_3.3_6800_cpy1.img" -export "$W/tx1" >/dev/null 2>&1
+	"$T" -new REBUILT tkdos-sssd -import "$W/tx1" -check -saveas "$W/rebuilt.img" > "$W/tkimp.log" 2>&1
+	grep -q "volume is consistent" "$W/tkimp.log" && ok || bad "TEKDOS import consistent"
+	"$T" -open "$W/rebuilt.img" -export "$W/tx2" >/dev/null 2>&1
+	diff -r "$W/tx1" "$W/tx2" >/dev/null && ok || bad "TEKDOS export/import/export differs"
+	E8002="$T8002/emu/build/tek8002"
+	if [ -x "$E8002" ]; then
+		run8002() { "$E8002" -prom "$T8002/roms/tekdos_boot.bin" -rw "$@" </dev/null 2>/dev/null | tr -d '\000\007' | tr '\r' '\n'; }
+		# TEKDOS boots from the rebuilt system disc
+		run8002 -0 "$W/rebuilt.img" -cycles $((25*1250000)) -type 6 'LDIR\r' > "$W/tkboot.log"
+		grep -q "REBUILT" "$W/tkboot.log" && grep -q "TOTAL FILES" "$W/tkboot.log" && ok || bad "TEKDOS boots a tekmato-built system disc"
+		# TEKDOS reads, copies and deletes on a tekmato disc; tekmato reads its writes back
+		cp "$TK/TekDOS_3.3_6800_cpy1.img" "$W/tsys.img"; chmod u+w "$W/tsys.img"
+		"$T" -new 'TEKMATO' tkdos-sssd -write "$W/a.txt" 'A;S' text -write "$W/b.bin" 'B%O' -saveas "$W/t1.img" >/dev/null 2>&1
+		run8002 -0 "$W/tsys.img" -1 "$W/t1.img" -cycles $((60*1250000)) -type 6 'LDIR 1\r' -type 18 'COPY A;S/1 CONO\r' \
+			-type 26 'COPY A;S/1 COPIED/1\r' -type 36 'DELETE B%O/1\r' > "$W/tkemu.log"
+		grep -q "LINE TWO" "$W/tkemu.log" && ok || bad "TEKDOS reads a tekmato file"
+		grep -q "ERROR" "$W/tkemu.log" && bad "TEKDOS reported an error: $(grep ERROR "$W/tkemu.log" | head -1)" || ok
+		"$T" -open "$W/t1.img" -check -list > "$W/tkafter.log" 2>&1
+		grep -q "volume is consistent" "$W/tkafter.log" && grep -q "COPIED" "$W/tkafter.log" && ! grep -q "B%O" "$W/tkafter.log" && ok || { bad "TEKDOS's writes read back"; tail -8 "$W/tkafter.log"; }
+		# TEKDOS's own FORMAT equals -new
+		head -c 315392 /dev/zero > "$W/blank.img"
+		run8002 -0 "$W/tsys.img" -1 "$W/blank.img" -cycles $((400*1250000)) -type 6 'FORMAT 1 FORMATTED\r' >/dev/null
+		cmp -s "$W/blank.img" "$W/fmt.img" && ok || bad "TEKDOS FORMAT differs from -new tkdos-sssd"
+	else
+		echo "(skipping TEKDOS cross-check: $E8002 not built)"
+	fi
+else
+	echo "(skipping TEKDOS checks: $TK not found)"
 fi
 
 echo "$pass passed, $fail failed"

@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <set>
+#include <cstdio>
 
 using namespace std;
 
@@ -14,7 +15,10 @@ void command_list::help()
 	     << "\towner and last update. Names keep DOS/50's abbreviation" << endl
 	     << "\tbrackets: ATT[RIBUTE] answers to ATT, ATTR, ... ATTRIBUTE." << endl
 	     << "\t  flat  only the named directory, no subdirectories" << endl
-	     << "\t  ids   also show file ids (descriptor numbers)" << endl;
+	     << "\t  ids   also show file ids (descriptor numbers)" << endl
+	     << "\tOn a TEKDOS disc: the directory as TEKDOS's LDIR / shows it (blocks," << endl
+	     << "\tsectors, bytes in the last sector, and a load module's IDENT, LOAD" << endl
+	     << "\tand START), with LDIR's totals." << endl;
 }
 
 static void list_dir(dos50::volume &vol, int dir, const string &indent, bool recurse, bool ids, set<int> &open, int &files, int &dirs)
@@ -36,9 +40,31 @@ static void list_dir(dos50::volume &vol, int dir, const string &indent, bool rec
 	open.erase(dir);
 }
 
+static void list_tekdos(const tekdos::volume &v)
+{
+	cout << "  " << v.ident() << endl << endl
+	     << "  " << left << setw(10) << "FILE NAME" << right << setw(5) << "BLKS" << setw(5) << "SEC" << setw(5) << "BYT"
+	     << "   " << left << setw(30) << "IDENT" << setw(11) << "LOAD" << "START" << right << endl;
+	for (auto &e : v.entries()) {
+		cout << "  " << left << setw(10) << tekdos::volume::display_name(e.name) << right << setw(5) << e.blocks << setw(5) << e.sectors << setw(5) << e.last;
+		auto h = v.header(e.slot);
+		if (h.valid) {
+			char ld[16], st[8];
+			snprintf(ld, sizeof ld, "%X-%X", h.load_lo, h.load_hi); snprintf(st, sizeof st, "%X", h.start);
+			cout << "   " << left << setw(30) << h.ident << setw(11) << ld << st << right;
+		}
+		cout << endl;
+	}
+	cout << endl << "  TOTAL FILES       " << setw(4) << v.active_count() << endl
+	     << "  TOTAL BLOCKS USED " << setw(4) << v.used_blocks() << endl
+	     << "  BLOCKS AVAILABLE  " << setw(4) << v.free_blocks() << endl
+	     << "  TOTAL BAD BLOCKS  " << setw(4) << v.bad_blocks() << endl;
+}
+
 void command_list::process(list<string> &pars)
 {
 	if (!need_volume()) return;
+	if (tk) { list_tekdos(tvol); return; }
 	string path;
 	bool recurse = true, ids = false;
 	for (auto &p : pars) {

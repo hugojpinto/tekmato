@@ -33,6 +33,15 @@ void command_delete::process(list<string> &pars)
 {
 	if (!need_volume()) return;
 	if (pars.empty()) { error("usage: -delete <path> ..."); return; }
+	if (tk) {
+		for (auto &p : pars) {
+			string err;
+			if (!tvol.remove(p, err)) { error(err); continue; }
+			dirty = true;
+			info("deleted " + p);
+		}
+		return;
+	}
 	for (auto &p : pars) {
 		string err, leaf;
 		int dir = vol.resolve_parent(p, leaf, err);
@@ -52,6 +61,7 @@ void command_mkdir::help()
 void command_mkdir::process(list<string> &pars)
 {
 	if (!need_volume()) return;
+	if (!dos50_only("-mkdir")) return;
 	if (pars.empty()) { error("usage: -mkdir <path> ..."); return; }
 	for (auto &p : pars) {
 		string err, leaf;
@@ -74,6 +84,7 @@ void command_link::help()
 void command_link::process(list<string> &pars)
 {
 	if (!need_volume()) return;
+	if (!dos50_only("-link")) return;
 	if (pars.size() != 2) { error("usage: -link <path> <newpath>"); return; }
 	string err, leaf;
 	int id = vol.resolve(pars.front(), err);
@@ -101,6 +112,12 @@ void command_move::process(list<string> &pars)
 	if (!need_volume()) return;
 	if (pars.size() != 2) { error("usage: -move <path> <newpath>"); return; }
 	string err, leaf, nleaf, src = pars.front(), dest = pars.back();
+	if (tk) {
+		if (!tvol.rename(src, dest, err)) { error(err); return; }
+		dirty = true;
+		info("renamed " + src + " to " + dest);
+		return;
+	}
 	int dir = vol.resolve_parent(src, leaf, err);
 	if (dir < 0) { error(err); return; }
 	int id = vol.find(dir, leaf);
@@ -143,6 +160,7 @@ void command_attrib::help()
 void command_attrib::process(list<string> &pars)
 {
 	if (!need_volume()) return;
+	if (!dos50_only("-attrib")) return;
 	if (pars.empty()) { error("usage: -attrib <path> [cap=...] [owner=...]"); return; }
 	string err, path = pars.front();
 	pars.pop_front();
@@ -190,12 +208,20 @@ void command_check::help()
 	cout << " -check [fix]" << endl
 	     << "\tVerify the volume: bitmaps against descriptors, link counts," << endl
 	     << "\tshared blocks. Lists orphans (descriptors in use that no directory" << endl
-	     << "\tnames; DOS/50 leaves these behind). 'fix' frees the orphans." << endl;
+	     << "\tnames; DOS/50 leaves these behind). 'fix' frees the orphans." << endl
+	     << "\tTEKDOS: the master map against the files' maps and the bad-block" << endl
+	     << "\tmap, shared blocks, each file's sectors, and the file count." << endl;
 }
 
 void command_check::process(list<string> &pars)
 {
 	if (!need_volume()) return;
+	if (tk) {
+		auto r = tvol.check();
+		for (auto &p : r.problems) cout << "W : " << p << endl;
+		if (r.problems.empty()) info("volume is consistent");
+		return;
+	}
 	bool fix = !pars.empty() && pars.front() == "fix";
 	auto r = vol.check();
 	for (auto &p : r.problems) cout << "W : " << p << endl;

@@ -3,19 +3,29 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <cstring>
 
-const char *const TEKMATO_VERSION = "0.2.2";
-const char *const TEKMATO_VERSION_DATE = "2026-11-11";
+const char *const TEKMATO_VERSION = "0.3.0";
+const char *const TEKMATO_VERSION_DATE = "2026-11-12";
 
 int command::status = 0;
 dos50::volume command::vol;
+tekdos::volume command::tvol;
+bool command::tk = false;
 bool command::dirty = false;
 std::string command::owner = "NO.NAME";
 
 bool command::need_volume()
 {
-	if (vol.loaded()) return true;
+	if (tk ? tvol.loaded() : vol.loaded()) return true;
 	error("no volume open (use -open FILE or -new first)");
+	return false;
+}
+
+bool command::dos50_only(const char *what)
+{
+	if (!tk) return true;
+	error(std::string(what) + ": TEKDOS discs have one flat directory, no " + (std::string(what) == "-attrib" ? "attributes" : "directories or links"));
 	return false;
 }
 
@@ -78,6 +88,19 @@ std::string command::dos50_name(const std::string &h)
 		std::string t;
 		for (char c : s) if (c != '[' && c != ']') t += c;
 		s = t;
+	}
+	return s;
+}
+
+// TEKDOS names: upper case A-Z 0-9 and ! " # % & ' ( ) * ; = ? @, a letter first, 8 at most
+std::string command::tekdos_name(const std::string &h)
+{
+	std::string base = h.substr(h.find_last_of('/') + 1), s;
+	for (unsigned char c : base) {
+		if (s.size() == size_t(tekdos::NAME_LEN)) break;
+		c = static_cast<unsigned char>(toupper(c));
+		if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (!s.empty() && std::strchr("!\"#%&'()*;=?@", c))) s += char(c);
+		else if (c == '.' && !s.empty()) s += ';';     // HELLO.ASM -> HELLO;AS (the suffix convention: ;S %S ...)
 	}
 	return s;
 }

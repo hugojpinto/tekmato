@@ -16,13 +16,17 @@ static bool take_flag(list<string> &pars, const string &flag)
 	return false;
 }
 
+// a TEKDOS name as a host file name: the system overlay file '.' is SYSTEM.SOF ('.' is not a
+// legal TEKDOS character, so the name cannot clash); the others are legal host names as they are
+static string tekdos_host_name(const string &n) { return n == "\x0f" || n == "." ? "SYSTEM.SOF" : n; }
+
 // ---------------------------------------------------------------- -read
 
 void command_read::help()
 {
 	cout << " -read <path> [<file>] [text]" << endl
-	     << "\tCopy one DOS/50 file to a local file (default: its own name)." << endl
-	     << "\t'text' turns DOS/50's CR line ends into LF." << endl;
+	     << "\tCopy one file to a local file (default: its own name)." << endl
+	     << "\t'text' turns CR line ends (DOS/50's and TEKDOS's) into LF." << endl;
 }
 
 void command_read::process(list<string> &pars)
@@ -31,6 +35,16 @@ void command_read::process(list<string> &pars)
 	bool text = take_flag(pars, "text");
 	if (pars.empty() || pars.size() > 2) { error("usage: -read <path> [<file>] [text]"); return; }
 	string err, path = pars.front();
+	if (tk) {
+		int s = tvol.find(path);
+		if (s < 0) { error("file not found: " + path); return; }
+		auto data = tvol.read_file(s);
+		if (text) to_text_host(data);
+		string out = pars.size() == 2 ? pars.back() : tekdos_host_name(path);
+		if (!host_write(out, data, err)) { error(err); return; }
+		info(path + " -> " + out + " (" + to_string(data.size()) + " bytes)");
+		return;
+	}
 	int id = vol.resolve(path, err);
 	if (id < 0) { error(err); return; }
 	if (vol.desc(id).is_dir()) { error(path + " is a directory (use -export)"); return; }
@@ -45,7 +59,7 @@ void command_read::process(list<string> &pars)
 
 void command_type::help()
 {
-	cout << " -type <path>" << endl << "\tPrint a DOS/50 text file on the terminal (CR line ends shown as LF)." << endl;
+	cout << " -type <path>" << endl << "\tPrint a text file on the terminal (CR line ends shown as LF)." << endl;
 }
 
 void command_type::process(list<string> &pars)
@@ -53,10 +67,17 @@ void command_type::process(list<string> &pars)
 	if (!need_volume()) return;
 	if (pars.size() != 1) { error("usage: -type <path>"); return; }
 	string err;
-	int id = vol.resolve(pars.front(), err);
-	if (id < 0) { error(err); return; }
-	if (vol.desc(id).is_dir()) { error(pars.front() + " is a directory"); return; }
-	auto data = vol.read_file(id);
+	vector<dos50::u8> data;
+	if (tk) {
+		int s = tvol.find(pars.front());
+		if (s < 0) { error("file not found: " + pars.front()); return; }
+		data = tvol.read_file(s);
+	} else {
+		int id = vol.resolve(pars.front(), err);
+		if (id < 0) { error(err); return; }
+		if (vol.desc(id).is_dir()) { error(pars.front() + " is a directory"); return; }
+		data = vol.read_file(id);
+	}
 	to_text_host(data);
 	for (auto c : data) {
 		if (c == '\n' || c == '\t' || (c >= 0x20 && c < 0x7f)) cout << char(c);
@@ -72,7 +93,9 @@ void command_write::help()
 	cout << " -write <file> [<path>] [text]" << endl
 	     << "\tCopy a local file onto the volume (default: root, its own name)." << endl
 	     << "\tA path ending in / names a directory. An existing file is" << endl
-	     << "\treplaced. 'text' turns LF / CR LF into DOS/50's CR." << endl;
+	     << "\treplaced. 'text' turns LF / CR LF into CR. On TEKDOS the default" << endl
+	     << "\tname is made legal: upper case, 8 characters, '.' as ';'" << endl
+	     << "\t(hello.asm -> HELLO;AS)." << endl;
 }
 
 static bool put_file(dos50::volume &vol, const string &src, string dest, bool text, string &err, const string &owner_name,
@@ -100,6 +123,16 @@ void command_write::process(list<string> &pars)
 	bool text = take_flag(pars, "text");
 	if (pars.empty() || pars.size() > 2) { error("usage: -write <file> [<path>] [text]"); return; }
 	string err, dest = pars.size() == 2 ? pars.back() : "";
+	if (tk) {
+		vector<dos50::u8> data;
+		if (!host_read(pars.front(), data, err)) { error(err); return; }
+		if (text) to_text_dos50(data);
+		string name = dest.empty() ? tekdos_name(pars.front()) : dest;
+		if (tvol.write_file(name, data, err) < 0) { error(err); return; }
+		dirty = true;
+		info(pars.front() + " -> " + name);
+		return;
+	}
 	if (!put_file(vol, pars.front(), dest, text, err, owner, host_read, to_text_dos50, dos50_name)) { error(err); return; }
 	dirty = true;
 	info(pars.front() + " -> " + (dest.empty() || dest.back() == '/' ? dest + dos50_name(pars.front()) : dest));
@@ -112,7 +145,8 @@ void command_export::help()
 	cout << " -export [<directory>] [<path>] [text]" << endl
 	     << "\tCopy a DOS/50 directory tree (default: the whole volume) into a" << endl
 	     << "\tlocal directory (default: current). Names keep their abbreviation" << endl
-	     << "\tbrackets (ATT[RIBUTE]). 'text' converts every file's CR to LF." << endl;
+	     << "\tbrackets (ATT[RIBUTE]). 'text' converts every file's CR to LF." << endl
+	     << "\tTEKDOS: every file; the system overlay file '.' becomes SYSTEM.SOF." << endl;
 }
 
 static bool mkdir_p(const string &d)
@@ -130,6 +164,19 @@ void command_export::process(list<string> &pars)
 	if (!pars.empty()) { out = pars.front(); pars.pop_front(); }
 	if (!pars.empty()) { path = pars.front(); pars.pop_front(); }
 	string err;
+	if (tk) {
+		if (!path.empty()) { error("TEKDOS discs have no directories"); return; }
+		if (!mkdir_p(out)) { error("cannot create " + out); return; }
+		int files = 0;
+		for (auto &e : tvol.entries()) {
+			auto data = tvol.read_file(e.slot);
+			if (text) to_text_host(data);
+			if (!host_write(out + "/" + tekdos_host_name(e.name), data, err)) { error(err); continue; }
+			files++;
+		}
+		info(to_string(files) + " files exported to " + out);
+		return;
+	}
 	int root = vol.resolve(path, err);
 	if (root < 0) { error(err); return; }
 	if (!vol.desc(root).is_dir()) { error(path + " is not a directory"); return; }
@@ -166,7 +213,8 @@ void command_import::help()
 	cout << " -import <directory> [<path>] [text]" << endl
 	     << "\tCopy every file of a local directory (with its subdirectories)" << endl
 	     << "\tinto a DOS/50 directory (default: root). Names are cut to 14" << endl
-	     << "\tcharacters; existing files are replaced." << endl;
+	     << "\tcharacters; existing files are replaced. TEKDOS: the files of the" << endl
+	     << "\tdirectory only, named as -write does (SYSTEM.SOF back to '.')." << endl;
 }
 
 void command_import::process(list<string> &pars)
@@ -175,6 +223,30 @@ void command_import::process(list<string> &pars)
 	bool text = take_flag(pars, "text");
 	if (pars.empty() || pars.size() > 2) { error("usage: -import <directory> [<path>] [text]"); return; }
 	string err, base = pars.front(), dest = pars.size() == 2 ? pars.back() : "";
+	if (tk) {
+		if (!dest.empty()) { error("TEKDOS discs have no directories"); return; }
+		DIR *d = opendir(base.c_str());
+		if (!d) { error("cannot read directory " + base); return; }
+		vector<string> names;
+		while (dirent *de = readdir(d)) if (de->d_name[0] != '.') names.push_back(de->d_name);
+		closedir(d);
+		sort(names.begin(), names.end());
+		int files = 0;
+		for (auto &n : names) {
+			string hp = base + "/" + n;
+			struct stat st;
+			if (stat(hp.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) { if (S_ISDIR(st.st_mode)) cout << "W : " << hp << ": subdirectory skipped (TEKDOS has none)" << endl; continue; }
+			vector<dos50::u8> data;
+			if (!host_read(hp, data, err)) { error(err); continue; }
+			if (text) to_text_dos50(data);
+			const bool sof = n == "SYSTEM.SOF";
+			if ((sof ? tvol.write_system_overlay(data, err) : tvol.write_file(tekdos_name(n), data, err)) < 0) { error(hp + ": " + err); continue; }
+			files++;
+		}
+		dirty = true;
+		info(to_string(files) + " files imported from " + base);
+		return;
+	}
 	int files = 0, links = 0;
 	map<pair<dev_t, ino_t>, int> seen;      // host hard links become DOS/50 links
 	struct job { string host, dos; int depth; };
