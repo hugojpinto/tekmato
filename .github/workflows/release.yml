@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
+# Binary releases: pushing a tag vX.Y.Z (equal to VERSION) builds tekmato for macOS (universal),
+# Linux (x86-64) and Windows (x64), runs the regression on macOS and Linux (the checks that need
+# no emulator), and publishes the archives as a GitHub release. Run by hand (workflow_dispatch),
+# it builds and uploads the archives as artifacts only.
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: macos-universal, os: macos-latest,  program: tekmato }
+          - { platform: linux-x86_64,    os: ubuntu-22.04,  program: tekmato }
+          - { platform: windows-x64,     os: ubuntu-24.04,  program: build-win/tekmato.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+
+      - name: macOS - universal build
+        if: matrix.platform == 'macos-universal'
+        run: |
+          U="-arch arm64 -arch x86_64 -mmacosx-version-min=11.0"
+          make -j4 CXX="clang++ $U"
+          lipo -info tekmato
+
+      - name: Linux - build (libstdc++ and libgcc linked statically)
+        if: matrix.platform == 'linux-x86_64'
+        run: make -j4 LDFLAGS="-static-libstdc++ -static-libgcc"
+
+      - name: Windows - cross-built with MinGW-w64 (statically linked)
+        if: matrix.platform == 'windows-x64'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mingw-w64 zip
+          make -j4 CROSS=x86_64-w64-mingw32-
+
+      - name: Test (version and regression)
+        if: matrix.platform != 'windows-x64'
+        run: |
+          ./tekmato -version
+          test "$(./tekmato -version)" = "tekmato $(cat VERSION)"
+          make test
+
+      - name: Package
+        run: tools/package_release.sh ${{ matrix.platform }} ${{ matrix.program }} dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*.*z*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(cat VERSION)
+          cat > notes.md <<NOTES
+          tekmato $V: reads, writes and checks disc images of the Tektronix 8550 MDL (DOS/50) and the 8001/8002/8002A µProcessor Labs (TEKDOS).
+
+          - **macOS** (universal: Apple Silicon and Intel; macOS 11 or later): unpack, then see *not signed or notarised* below.
+          - **Linux** (x86-64; glibc 2.35 or later).
+          - **Windows** (x64; Windows 10 or later): unzip.
+
+          Each archive holds the program and its documentation: see QUICKSTART.txt. What changed: [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/CHANGELOG.md).
+          NOTES
+          tail -n +2 .github/release-notes-unsigned.md >> notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$V" --notes-file notes.md

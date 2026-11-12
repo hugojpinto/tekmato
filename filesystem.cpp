@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // The format registry: the only place that lists the file systems tekmato knows.
 // Adding one means an adapter (a filesystem subclass with its open/create
 // functions) and its lines here; no command changes.

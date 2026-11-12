@@ -1,8 +1,10 @@
 # tekmato
 
 tekmato is a command-line tool for Tektronix development-lab disc images: DOS/50 (the 8550 MDL's 8501 DMU; formats `dos50-sssd/ssdd/dssd/dsdd`) and TEKDOS (the 8001/8002/8002A µProcessor Lab's Flexible Disc Unit; format `tkdos-sssd`).
-- **Version:** `TEKMATO_VERSION` in `command.cpp`.
-- **Siblings:** the 8550 emulator in `../tektronix-8550-emulator` and the 8002A emulator in `../tektronix-8002-emulator`; their disc images are this tool's test corpus, and their emulators check what tekmato writes.
+- **Version:** the `VERSION` file (compiled in by the Makefile; `-version`). Releases: bump `VERSION`, add a `CHANGELOG.md` entry, push a tag `vX.Y.Z` equal to it; `.github/workflows/release.yml` builds macOS universal, Linux x86-64 and Windows x64 (`make CROSS=x86_64-w64-mingw32-`, `build-win/tekmato.exe`) with `tools/package_release.sh` and publishes them. Unsigned (`.github/release-notes-unsigned.md`).
+- **Public:** github.com/hugojpinto/tekmato, GPL-2.0-or-later (`LICENSE`, `NOTICE.md`, an SPDX header in every file). `.claude/` is git-ignored (it sets an empty commit attribution); commits carry no AI attribution.
+- **Portability:** host files only through `std::filesystem` (no POSIX calls). Disc-name characters Windows forbids are mapped to U+F000+c on export (Windows only) and back on import (`command::host_name_out/in`).
+- **Siblings:** the 8550 emulator in `../tektronix-8550-emulator` and the 8002A emulator in `../tektronix-8002-emulator` (or `TEK8550_DIR`/`TEK8002_DIR`); their emulators check what tekmato writes when built. The test corpus is `testdata/` (copied from their `sources/bitsavers/disks`, read-only, SHA-256 in `testdata/README.md`).
 - **Model:** tekmato reuses the ideas, syntax and command structure of tomato (`../../tomato`, a Timex TOS/CP/M tool) but none of its code. It does not support TOS or CP/M, and it should stay that way.
 
 ## Layout
@@ -15,7 +17,7 @@ Four layers, each knowing only the one below (as tomato's `disk_filesystem`, wit
 | adapters | `dos50_fs.cpp`, `tekdos_fs.cpp` | one `filesystem` per family, private to its file; they expose only their open/create functions (declared in `filesystem.hpp`). Each prints its own `-info`, `-list` and `-check` columns |
 | volumes | `dos50_volume.{hpp,cpp}`, `tekdos_volume.{hpp,cpp}` | the on-disk formats, free of tekmato: image I/O, labels, maps, directories, allocation, check |
 
-Docs and tests: `FORMAT.md` (DOS/50) and `FORMAT-TEKDOS.md` are **the on-disk formats and the evidence for each fact**; update them whenever a field is newly understood. `scripts/regression.sh` has 97 checks (section 6: TEKDOS); run it after any change (`make test`).
+Docs and tests: `FORMAT.md` (DOS/50) and `FORMAT-TEKDOS.md` are **the on-disk formats and the evidence for each fact**; update them whenever a field is newly understood. `scripts/regression.sh` has 98 checks (69 without the emulators; section 6: TEKDOS); run it after any change (`make test`).
 
 Adding a command means:
 1. adding `DECLARE_COMMAND(x)` in `command.hpp`;
@@ -28,7 +30,7 @@ Adding a file system means: its volume class, an adapter `x_fs.cpp` with `open_x
 ## Rules
 - **Fidelity:** DOS/50 and TEKDOS must accept everything tekmato writes. The regression runs DOS/50 in `../tektronix-8550-emulator/emu/build/tek8550` and TEKDOS in `../tektronix-8002-emulator/emu/build/tek8002` against tekmato-made volumes; keep both passing.
 - **Unknown bytes:** when a descriptor or directory changes, change only the known fields. Their meanings came from diffing images before and after a DOS/50 command (FORMAT.md, "Evidence").
-- **Originals are read only:** never write into `../tektronix-8550-emulator/sources/` or `../tektronix-8002-emulator/sources/`. Tests work on copies in a temp directory.
+- **Originals are read only:** never write into `testdata/` or the emulators' `sources/`. Tests work on copies in a temp directory.
 - **Learning a new detail:** script a DOS/50 or TEKDOS session in its emulator (`-rw` on a copy, `-type T 'CMD\r'`), diff the image before and after, and record the finding in FORMAT.md or FORMAT-TEKDOS.md.
 
 ## Open questions

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // TEKDOS volume: see tekdos_volume.hpp and FORMAT-TEKDOS.md.
 #include "tekdos_volume.hpp"
 #include <algorithm>

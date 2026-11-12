@@ -2,7 +2,7 @@
 
 (tekmato's `dos50-*` formats. The 8002's TEKDOS format, `tkdos-sssd`, is in [FORMAT-TEKDOS.md](FORMAT-TEKDOS.md).)
 
-This is the file system of the Tektronix 8550 MDL: DOS/50 V1.0 and later, on the 8501 Data Management Unit's double-sided, double-density 8-inch floppies. No Tektronix document describing it has been found, so everything below was worked out from the disc images in `../tektronix-8550-emulator/sources/bitsavers/disks/`. It was then confirmed by running DOS/50 in the MDL emulator and diffing the image before and after a command. Each fact gives its evidence.
+This is the file system of the Tektronix 8550 MDL: DOS/50 V1.0 and later, on the 8501 Data Management Unit's double-sided, double-density 8-inch floppies. No Tektronix document describing it has been found, so everything below was worked out from the disc images in [testdata/dos50/](testdata/dos50/) (from bitsavers). It was then confirmed by running DOS/50 in the [8550 emulator](https://github.com/hugojpinto/tektronix-8550-emulator) and diffing the image before and after a command. Each fact gives its evidence.
 
 All multi-byte values are little-endian PDP-11 words. 32-bit values store the **high word first** (PDP-11 order).
 

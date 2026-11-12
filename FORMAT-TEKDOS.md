@@ -3,9 +3,9 @@
 This is the file system of the Tektronix 8001/8002/8002A µProcessor Lab: TEKDOS (versions 3.1 and 3.3 seen) on the Flexible Disc Unit's 8-inch, single-sided, single-density, **hard-sectored** floppies. tekmato calls it **`tkdos-sssd`**. The DOS/50 format of the 8550 is unrelated; see [FORMAT.md](FORMAT.md).
 
 Sources, as cited below:
-- the Flexible Disc Unit service manual 070-2587 (Table 1-1 "Disc File Structure"), in `../tektronix-8002-emulator/sources/bitsavers/manuals/800x/`;
-- the 33 disc images on bitsavers (`bits/Tektronix/8002/`, copied to `../tektronix-8002-emulator/sources/bitsavers/disks/`), several photographed with a printout of their directory;
-- TEKDOS 3.3 itself, running in the 8002 emulator (`../tektronix-8002-emulator`): its FORMAT, COPY, DELETE and LDIR, with the image diffed before and after.
+- the Flexible Disc Unit service manual 070-2587 (Table 1-1 "Disc File Structure"), in the [8002 emulator](https://github.com/hugojpinto/tektronix-8002-emulator)'s `sources/bitsavers/manuals/800x/`;
+- the 33 disc images on bitsavers (`bits/Tektronix/8002/`, copied to [testdata/tekdos/](testdata/tekdos/)), several photographed with a printout of their directory;
+- TEKDOS 3.3 itself, running in the [8002 emulator](https://github.com/hugojpinto/tektronix-8002-emulator): its FORMAT, COPY, DELETE and LDIR, with the image diffed before and after.
 
 ## Geometry
 77 tracks × 32 sectors × 128 bytes, FM. A raw image holds the sectors in **logical** order, track by track: 315,392 bytes, and that size identifies the format. The disc is physically interleaved (sectors written 0, 16, 1, 17 …, 070-2587 "Sector Interleaving"), but an image does not show this. ImageDisk cannot represent hard sectors, so tekmato writes TEKDOS discs only as raw images.

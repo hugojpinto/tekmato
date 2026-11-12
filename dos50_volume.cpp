@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // DOS/50 volume: image I/O, label, bitmaps, descriptors, directories.
 #include "dos50_volume.hpp"
 #include <algorithm>
@@ -666,8 +668,7 @@ u32 volume::encode_time(int year, int month, int day, int h, int mi, int sec)
 u32 volume::now_local()
 {
 	time_t t = time(nullptr);
-	struct tm lt;
-	localtime_r(&t, &lt);
+	const struct tm lt = *localtime(&t);     // single-threaded; localtime_r is not on Windows
 	return encode_time(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, lt.tm_sec);
 }
 

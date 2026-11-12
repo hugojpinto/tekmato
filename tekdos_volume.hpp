@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // TEKDOS volume (Tektronix 8001/8002/8002A µProcessor Lab, Flexible Disc Unit).
 // On-disk format from the FDU service manual 070-2587 Table 1-1, checked on the
 // bitsavers disc collection; see FORMAT-TEKDOS.md.

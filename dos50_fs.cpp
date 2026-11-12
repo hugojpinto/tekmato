@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // DOS/50 behind tekmato's filesystem interface (see filesystem.hpp, FORMAT.md).
 #include "filesystem.hpp"
 #include "dos50_volume.hpp"

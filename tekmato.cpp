@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // tekmato -- TEKtronix MAnipulation TOol: DOS/50 disc images of the Tektronix 8550 MDL and
 // TEKDOS disc images of the 8001/8002/8002A µProcessor Lab.
 // Same command-line model as tomato: -open an image, chain commands, -save.
@@ -16,7 +18,7 @@ static map<string, command *> cmd_map = {
 	{ "-write", new command_write() },
 };
 
-static void print_banner() { cerr << endl << "TEKtronix MAnipulation TOol v" << TEKMATO_VERSION << " (" << TEKMATO_VERSION_DATE << ")" << endl << endl; }
+static void print_banner() { cerr << endl << "TEKtronix MAnipulation TOol v" << TEKMATO_VERSION << endl << endl; }
 
 static void command_help()
 {
@@ -49,6 +51,8 @@ static void command_help()
 
 int main(int argc, char *argv[])
 {
+	for (int i = 1; i < argc; i++)
+		if (string(argv[i]) == "-version" || string(argv[i]) == "--version") { cout << "tekmato " << TEKMATO_VERSION << endl; return 0; }
 	print_banner();
 	list<string> args;
 	bool help = argc < 2;
@@ -56,7 +60,6 @@ int main(int argc, char *argv[])
 	for (int i = 1; i < argc; i++) {
 		string p = argv[i];
 		if (p == "-help" || p == "--help") { help = true; continue; }
-		if (p == "-version" || p == "--version") return 0;
 		if (p[0] == '-' && p.size() > 1 && !cmd_map.count(p)) {
 			cerr << "E : Unknown command: " << p << endl << "    Use -help for a list of available commands." << endl;
 			bye = 2;

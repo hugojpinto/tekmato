@@ -1,14 +1,17 @@
 #!/bin/bash
-# tekmato regression: invariants on the MDL and 8002 disc collections, round trips,
-# and (if the emulators are built next door) DOS/50 and TEKDOS themselves reading
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
+# tekmato regression: invariants on the DOS/50 and TEKDOS disc collections in testdata/,
+# round trips, and (if the emulators are checked out and built next door) DOS/50 and TEKDOS themselves reading
 # and writing volumes made by tekmato. Usage: scripts/regression.sh   (from the tekmato dir)
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 T="$HERE/tekmato"
-MDL="$HERE/../tektronix-8550-emulator"
-DISKS="$MDL/sources/bitsavers/disks"
-T8002="$HERE/../tektronix-8002-emulator"
-TK="$T8002/sources/bitsavers/disks"
+DISKS="$HERE/testdata/dos50"
+TK="$HERE/testdata/tekdos"
+# optional: the emulators, for the DOS/50 and TEKDOS cross-checks (sections 5 and 6)
+MDL="${TEK8550_DIR:-$HERE/../tektronix-8550-emulator}"
+T8002="${TEK8002_DIR:-$HERE/../tektronix-8002-emulator}"
 W="$(mktemp -d)"
 trap 'rm -rf "$W"' EXIT
 pass=0; fail=0
@@ -24,8 +27,8 @@ expect() {  # expect "description" "needle" command...
 
 # ---- 1. reading the collection (originals are never written)
 expect "System label"        "Volume         SYSTEM"   "$T" -open "$DISKS/System.imd" -info
-expect "System free blocks"  "Free blocks    245"      "$T" -open "$MDL/disks/System_Fixed.img" -info
-expect "System files used"   "Files used     223"      "$T" -open "$MDL/disks/System_Fixed.img" -info   # = LDIR
+expect "System free blocks"  "Free blocks    245"      "$T" -open "$DISKS/System_Fixed.img" -info
+expect "System files used"   "Files used     223"      "$T" -open "$DISKS/System_Fixed.img" -info   # = LDIR
 expect "System orphans"      "88 orphan files"         "$T" -open "$DISKS/System.imd" -check
 expect "8085 disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-4641-03_8300E06_8085_Emulator_V2.1_DOS50.imd" -check
 expect "PROM disc clean"     "volume is consistent"    "$T" -open "$DISKS/062-6036-01_8550F30_prom_programmer_2.1_1982.imd" -check
@@ -36,7 +39,7 @@ expect "14-char volume name" "Volume         ABCDEFGHIJKLMN" "$T" -new 64 ABCDEF
 expect "DIAG lost blocks"    "24 blocks marked in use" "$T" -open "$DISKS/8550_DIAG.IMD" -check
 expect "DOS/50 calendar"     "CREATION=02-OCT-80/08:52:43" "$T" -open "$DISKS/System.imd" -attrib 8501.SAV
 expect "abbreviated name"    "ATT[RIBUTE]"             "$T" -open "$DISKS/System.imd" -list 8301/COMMANDS flat
-expect "abbreviation lookup" "Alters or displays file attributes" "$T" -open "$MDL/disks/System_Fixed.img" -type 8301/COMMANDS/HELP
+expect "abbreviation lookup" "Alters or displays file attributes" "$T" -open "$DISKS/System_Fixed.img" -type 8301/COMMANDS/HELP
 expect "hard links counted"  "LINK=7"                  "$T" -open "$DISKS/System.imd" -attrib 8301/COMMANDS/ATT
 # abbreviation brackets in new names: one trailing pair, as DOS/50's command files have
 expect "bracket name written" "DS[]"                   "$T" -new 64 B -write "$HERE/README.md" 'DS[]' -write "$HERE/README.md" 'HE[LLO]' -list
@@ -57,6 +60,8 @@ grep -q "volume is consistent" "$W/imp.log" && ok || { bad "import consistent"; 
 "$T" -open "$W/copy.img" -export "$W/x2" >/dev/null 2>&1
 diff -r "$W/x1" "$W/x2" >/dev/null && ok || bad "export/import/export differs"
 expect "links kept"          "LINK=7"                  "$T" -open "$W/copy.img" -attrib 8301/COMMANDS/ATTRIBUTE
+# a file with 7 links is exported as 7 host names of one file (host hard links)
+nl=$(find "$W/x1" -samefile "$W/x1/8301/COMMANDS/ATT[RIBUTE]" | wc -l); [ "$nl" -eq 7 ] && ok || bad "export: $nl host hard links, wanted 7"
 n1=$(find "$W/x1" -type f | wc -l); [ "$n1" -gt 100 ] && ok || bad "export found only $n1 files"
 
 # ---- 4. edits on a new volume, checked after every step
@@ -86,12 +91,12 @@ head -c 1100000 /dev/zero > "$W/big"
 "$T" -open "$V" -write "$W/big" BIG -check > "$W/full.log" 2>&1
 grep -q "disc full" "$W/full.log" && grep -q "volume is consistent" "$W/full.log" && ok || { bad "disc full handling"; tail -4 "$W/full.log"; }
 
-# ---- 5. DOS/50 itself (needs ../tektronix-8550-emulator/emu/build/tek8550)
+# ---- 5. DOS/50 itself (needs the 8550 emulator built: $MDL/emu/build/tek8550)
 EMU="$MDL/emu/build/tek8550"
 if [ -x "$EMU" ]; then
 	printf 'BRACKETS OK\n' > "$W/b.txt"
 	"$T" -new 256 TEKMATO -mkdir SRC -write "$W/a.txt" SRC/A.TXT text -write "$W/b.txt" 'SRC/BR[ACKET]' text -saveas "$W/d1.img" >/dev/null 2>&1
-	cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
+	cp "$DISKS/System_Fixed.img" "$W/d0.img"; chmod u+w "$W/d0.img"
 	(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/d1.img" -cycles $((75*2000000)) \
 		-type 32 'COPY /VOL/TEKMATO/SRC/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TEKMATO/K\r' \
 		-type 48 'CREATE /VOL/TEKMATO/NEW\r' -type 56 'DELETE:N /VOL/TEKMATO/SRC/A.TXT\r' \
@@ -107,7 +112,7 @@ if [ -x "$EMU" ]; then
 		case $g in sssd) recs=1989; opt=":S"; want=1001;; ssdd) recs=1989; opt=""; want=1989;;
 		           dssd) recs=3991; opt=":S"; want=2002;; dsdd) recs=3991; opt=""; want=3991;; esac
 		head -c $((recs*256)) /dev/zero > "$W/f_$g.img"
-		cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
+		cp "$DISKS/System_Fixed.img" "$W/d0.img"; chmod u+w "$W/d0.img"
 		# the controller formats at the drive's real speed: two-sided discs need ~2.5 minutes
 		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/f_$g.img" -cycles $((240*2000000)) \
 			-type 32 "FORMAT${opt}:N /DEV/FLX1 100 FMT\\r" </dev/null >/dev/null 2>&1)
@@ -123,7 +128,7 @@ same = len(a) == len(b) and la[:16] == lb[:16] and la[0x2a:0x36] == lb[0x2a:0x36
 sys.exit(0 if same else 1)
 PY
 		"$T" -new 64 TK dos50-$g -write "$W/a.txt" A.TXT text -saveas "$W/tk_$g.imd" >/dev/null 2>&1
-		cp "$MDL/disks/System_Fixed.img" "$W/d0.img"
+		cp "$DISKS/System_Fixed.img" "$W/d0.img"; chmod u+w "$W/d0.img"
 		(cd "$MDL/emu" && ./build/tek8550 -rw -term tty -0 "$W/d0.img" -1 "$W/tk_$g.imd" -cycles $((60*2000000)) \
 			-type 32 'COPY /VOL/TK/A.TXT CONO\r' -type 40 'COPY MAKE.KONG /VOL/TK/K\r' </dev/null 2>/dev/null) | tr '\r' '\n' > "$W/e_$g.log"
 		grep -q "LINE TWO" "$W/e_$g.log" && ! grep -q "Error" "$W/e_$g.log" && ok || bad "$g: DOS/50 on a tekmato .imd"
@@ -133,7 +138,7 @@ else
 	echo "(skipping DOS/50 cross-check: $EMU not built)"
 fi
 
-# ---- 6. TEKDOS (8002A) discs (needs ../tektronix-8002-emulator; its emulator for the last part)
+# ---- 6. TEKDOS (8002A) discs (the last part needs the 8002 emulator built: $T8002/emu/build/tek8002)
 if [ -d "$TK" ]; then
 	B="$TK/Tek8002_Belgium_Amusements"
 	expect "old format name kept" "Format         dos50-sssd" "$T" -new 64 X sssd -info

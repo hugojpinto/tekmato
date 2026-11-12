@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // TEKDOS behind tekmato's filesystem interface (see filesystem.hpp, FORMAT-TEKDOS.md).
 // One flat directory: the root, whose id is ROOT; files are identified by their slot.
 #include "filesystem.hpp"

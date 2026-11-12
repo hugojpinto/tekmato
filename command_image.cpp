@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 Hugo José Pinto <hugo.pinto@gmail.com>
 // Image-level commands: -open -new -save -saveas -info -rename -owner
 #include "command.hpp"
 #include <cctype>
