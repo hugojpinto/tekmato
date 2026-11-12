@@ -51,7 +51,7 @@ expect "8086 overlays export" "BK[]"                   bash -c "'$T' -open '$DIS
 "$T" -open "$DISKS/System.imd" -saveas "$W/s.img" -saveas "$W/s.imd" >/dev/null 2>&1
 "$T" -open "$W/s.imd" -saveas "$W/s2.img" >/dev/null 2>&1
 cmp -s "$W/s.img" "$W/s2.img" && ok || bad "IMD -> img -> IMD -> img differs"
-[ "$(stat -f %z "$W/s.img" 2>/dev/null || stat -c %s "$W/s.img")" = $((3991*256)) ] && ok || bad "raw image size"
+[ "$(wc -c < "$W/s.img" | tr -d " ")" = $((3991*256)) ] && ok || bad "raw image size"
 
 # ---- 3. export the system disc, import it into a new volume, export again: same files
 "$T" -open "$DISKS/System.imd" -export "$W/x1" >/dev/null 2>&1
